@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rayjob-submitter
+  namespace: ci-system
+  labels:
+    app: rayjob-submitter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rayjob-submitter
+  template:
+    metadata:
+      labels:
+        app: rayjob-submitter
+    spec:
+      serviceAccountName: rayjob-submitter
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: rayjob-submitter
+          image: quay.io/albert54/rayjob-submitter:v0.0.4
+          imagePullPolicy: Always
+          env:
+            - name: LISTEN_ADDR
+              value: ":8080"
+            - name: TARGET_NAMESPACE
+              value: "ray"
+            - name: ALLOWED_REPOSITORY
+              value: "verl-project/verl"
+            - name: ALLOWED_IMAGE_PREFIXES
+              value: "quay.io/ascend/verl:,quay.io/albert54/verl-ci:"
+            - name: RAYJOB_TEMPLATE_PATH
+              value: "/app/templates/verl-rayjob.yaml"
+            - name: WORKER_REPLICAS
+              value: "2"
+            - name: MAX_WORKER_REPLICAS
+              value: "2"
+            - name: LOG_HEAD_WAIT_SECONDS
+              value: "1800"
+            - name: WATCH_TIMEOUT_SECONDS
+              value: "12600"
+            - name: STATUS_POLL_SECONDS
+              value: "30"
+            - name: ALLOWED_SCRIPT_PREFIXES
+              value: "tests/special_npu/,tests/special_e2e/,examples/data_preprocess/,/root/.cache/cicd_test/"
+            - name: MAX_ARGS
+              value: "64"
+            - name: MAX_ARG_LENGTH
+              value: "1024"
+            - name: MAX_EXTRA_ENV
+              value: "64"
+            - name: MAX_ENV_VALUE_LENGTH
+              value: "2048"
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 30
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rayjob-submitter
+  namespace: ci-system
+  labels:
+    app: rayjob-submitter
+spec:
+  type: ClusterIP
+  selector:
+    app: rayjob-submitter
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080
