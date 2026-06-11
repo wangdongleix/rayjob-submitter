@@ -4,6 +4,92 @@ Internal HTTP service for GitHub Actions to submit, watch, and clean up KubeRay 
 
 The service is template-driven: it loads `templates/verl-rayjob.yaml`, deep-copies it per request, and only patches image, entrypoint, labels, env, and worker replicas.
 
+## Architecture
+```mermaid
+flowchart LR
+    %% =========================
+    %% 外部触发层
+    %% =========================
+    subgraph A["代码与流水线触发层"]
+        GitHub["GitHub Repository<br/>verl-project/verl"]
+        Workflow["GitHub Actions Workflow<br/>e2e_ascend_multinode.yml"]
+    end
+
+    %% =========================
+    %% CI 执行层
+    %% =========================
+    subgraph B["CI 执行层<br/>Namespace: verl"]
+        Runner["GitHub Actions Runner"]
+        Cache["共享源码与缓存<br/>/root/.cache ↔ /nfs/verl_ci"]
+    end
+
+    %% =========================
+    %% 提交网关层
+    %% =========================
+    subgraph C["RayJob 提交网关层<br/>Namespace: ci-system"]
+        Submitter["rayjob-submitter<br/>统一提交 / 观测 / 清理入口"]
+        Template["RayJob 模板<br/>verl-rayjob.yaml"]
+        RBAC["最小权限 RBAC<br/>create / get / list / delete RayJob<br/>read pod logs"]
+    end
+
+    %% =========================
+    %% 训练编排层
+    %% =========================
+    subgraph D["分布式训练编排层<br/>Namespace: ray"]
+        RayJob["RayJob CR"]
+        KubeRay["KubeRay Operator"]
+        RayCluster["RayCluster<br/>Head + Workers + Submitter Pod"]
+    end
+
+    %% =========================
+    %% 训练执行层
+    %% =========================
+    subgraph E["训练执行层"]
+        Source["verl 源码"]
+        Data["数据集 / 模型缓存<br/>gsm8k / Qwen"]
+        Training["多机多卡训练任务<br/>verl PPO / GRPO / E2E"]
+        NPU["Ascend NPU 资源池"]
+    end
+
+    %% =========================
+    %% 观测与生命周期
+    %% =========================
+    subgraph F["观测与生命周期管理"]
+        Watch["状态与日志观察<br/>/watch NDJSON"]
+        Result["训练结果判定<br/>SUCCEEDED / FAILED / TIMEOUT"]
+        Cleanup["Workflow 结束清理<br/>DELETE /workflows/{run_id}"]
+    end
+
+    GitHub --> Workflow
+    Workflow --> Runner
+    Runner --> Cache
+
+    Runner -->|"POST /api/v1/rayjobs"| Submitter
+    Submitter --> Template
+    Submitter --> RBAC
+    Submitter -->|"创建 RayJob"| RayJob
+
+    RayJob --> KubeRay
+    KubeRay --> RayCluster
+
+    Cache --> Source
+    Cache --> Data
+    Source --> Training
+    Data --> Training
+    RayCluster --> Training
+    NPU --> Training
+
+    Runner -->|"GET /watch"| Watch
+    Watch --> Submitter
+    Submitter -->|"读取 RayJob 状态 / Pod 日志"| RayJob
+    RayJob --> Result
+    Result --> Workflow
+
+    Workflow --> Cleanup
+    Cleanup --> Submitter
+    Submitter -->|"删除本次 workflow attempt 的 RayJob"| RayJob
+```
+
 ## Configuration
 
 | Env | Default |
