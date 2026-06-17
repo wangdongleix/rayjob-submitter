@@ -44,8 +44,7 @@ spec:
             spec:
                 nodeSelector:
                     kubernetes.io/arch: arm64
-                    accelerator: huawei-Ascend910
-                    verl-head: "true"
+                    accelerator/huawei-npu: ascend-snt9c
 
                 volumes:
                     - name: nfs-cache
@@ -149,8 +148,7 @@ spec:
               spec:
                   nodeSelector:
                       kubernetes.io/arch: arm64
-                      accelerator: huawei-Ascend910
-                      verl-worker: "true"
+                      accelerator/huawei-npu: ascend-snt9c
 
                   volumes:
                       - name: nfs-cache
