@@ -20,7 +20,7 @@ spec:
         kubernetes.io/arch: amd64
       containers:
         - name: rayjob-submitter
-          image: quay.io/albert54/rayjob-submitter:v0.0.4
+          image: quay.io/albert54/rayjob-submitter:v0.0.4-a3
           imagePullPolicy: Always
           env:
             - name: LISTEN_ADDR

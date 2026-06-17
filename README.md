@@ -20,7 +20,7 @@ flowchart LR
     %% =========================
     subgraph B["CI 执行层<br/>Namespace: verl"]
         Runner["GitHub Actions Runner"]
-        Cache["共享源码与缓存<br/>/root/.cache ↔ /nfs/verl_ci"]
+        Cache["共享源码与缓存<br/>/root/.cache ↔ /root/.cache"]
     end
 
     %% =========================
@@ -170,7 +170,7 @@ cp scripts/run_multinode_testing.sh /root/.cache/cicd_test/run_multinode_testing
 chmod +x /root/.cache/cicd_test/run_multinode_testing.sh
 ```
 
-`/root/.cache` must map to the shared `/nfs/verl_ci` storage used by the GitHub runner and all RayJob pods. The workflow copies the checked-out verl repository to `/root/.cache/cicd_test/verl`; the wrapper then copies that tree into `/verl` in the RayJob submitter pod and every Ray worker, installs the repository, prepares gsm8k on workers, and runs the script passed by `--script-path`.
+`/root/.cache` must map to the shared `/root/.cache` storage used by the GitHub runner and all RayJob pods. The workflow copies the checked-out verl repository to `/root/.cache/cicd_test/verl`; the wrapper then copies that tree into `/verl` in the RayJob submitter pod and every Ray worker, installs the repository, prepares gsm8k on workers, and runs the script passed by `--script-path`.
 
 Example submitter payload fields for the wrapper:
 

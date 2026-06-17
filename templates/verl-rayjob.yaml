@@ -50,7 +50,7 @@ spec:
                 volumes:
                     - name: nfs-cache
                       hostPath:
-                          path: /nfs/verl_ci
+                          path: /root/.cache
                           type: Directory
                     # 声明 Head 节点的 shm 内存卷
                     - name: dshm
@@ -155,7 +155,7 @@ spec:
                   volumes:
                       - name: nfs-cache
                         hostPath:
-                            path: /nfs/verl_ci
+                            path: /root/.cache
                             type: Directory
                       # 声明 Worker 节点的 shm 内存卷（多卡训练主力，建议开大）
                       - name: dshm
