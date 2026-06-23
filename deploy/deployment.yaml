@@ -30,7 +30,7 @@ spec:
             - name: ALLOWED_REPOSITORY
               value: "verl-project/verl"
             - name: ALLOWED_IMAGE_PREFIXES
-              value: "quay.io/ascend/verl:,quay.io/albert54/verl-ci:"
+              value: "quay.io/ascend,quay.io/albert54,swr.cn-southwest-2.myhuaweicloud.com/modelfoundry/ascend-ci"
             - name: RAYJOB_TEMPLATE_PATH
               value: "/app/templates/verl-rayjob.yaml"
             - name: WORKER_REPLICAS
@@ -44,7 +44,7 @@ spec:
             - name: STATUS_POLL_SECONDS
               value: "30"
             - name: ALLOWED_SCRIPT_PREFIXES
-              value: "tests/special_npu/,tests/special_e2e/,examples/data_preprocess/,/root/.cache/cicd_test/"
+              value: "tests/special_npu/,tests/special_e2e/,examples/data_preprocess/,/root/.cache/cicd_test/,/verl"
             - name: MAX_ARGS
               value: "64"
             - name: MAX_ARG_LENGTH
