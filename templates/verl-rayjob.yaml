@@ -196,11 +196,11 @@ spec:
                             privileged: true
 
                         env:
-                            - name: HF_ENDPOINT  
+                            - name: HF_ENDPOINT
                               value: "https://hf-mirror.com"
-                            - name: HF_HUB_ENABLE_HF_TRANSFER  
+                            - name: HF_HUB_ENABLE_HF_TRANSFER
                               value: "0"
-                            - name: HCCL_CONNECT_TIMEOUT  
+                            - name: HCCL_CONNECT_TIMEOUT
                               value: "600"
                             - name: UV_EXTRA_INDEX_URL
                               value: "https://repo.huaweicloud.com/ascend/repos/pypi"
@@ -235,8 +235,8 @@ spec:
                             requests:
                                 cpu: "32"
                                 memory: "128Gi"
-                                huawei.com/Ascend910: "8"
+                                huawei.com/ascend-1980: "8"
                             limits:
                                 cpu: "32"
                                 memory: "128Gi"
-                                huawei.com/Ascend910: "8"
+                                huawei.com/ascend-1980: "8"
