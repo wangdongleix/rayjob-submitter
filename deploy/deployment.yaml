@@ -20,7 +20,7 @@ spec:
         kubernetes.io/arch: amd64
       containers:
         - name: rayjob-submitter
-          image: quay.io/albert54/rayjob-submitter:v0.0.6-a3
+          image: quay.io/albert54/rayjob-submitter:v0.0.7-a3
           imagePullPolicy: Always
           env:
             - name: LISTEN_ADDR
@@ -44,7 +44,7 @@ spec:
             - name: STATUS_POLL_SECONDS
               value: "30"
             - name: ALLOWED_SCRIPT_PREFIXES
-              value: "tests/special_npu/,tests/special_e2e/,examples/data_preprocess/,/root/.cache/cicd_test/,/verl"
+              value: "tests/special_npu/,tests/special_e2e/,examples/data_preprocess/,/root/.cache/,/verl"
             - name: MAX_ARGS
               value: "64"
             - name: MAX_ARG_LENGTH
