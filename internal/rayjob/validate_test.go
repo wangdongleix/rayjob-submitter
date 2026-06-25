@@ -123,7 +123,6 @@ func TestBuildEntrypoint(t *testing.T) {
 	}
 	for _, want := range []string{
 		"set -euxo pipefail",
-		"cd /verl",
 		"tests/special_npu/run.sh",
 		"--path",
 		"/root/a b",

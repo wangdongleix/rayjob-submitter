@@ -54,11 +54,10 @@ flowchart TD
 
 ```bash
 bash -lc 'set -euxo pipefail
-cd /verl
 bash/python <script> <args...>'
 ```
 
-所有参数都 shell quote。
+所有参数都 shell quote。submitter 不强制切换工作目录；仓库准备、`cd /verl` 等工作目录选择由 workflow 传入的 wrapper/script 自行处理。
 
 ## API
 

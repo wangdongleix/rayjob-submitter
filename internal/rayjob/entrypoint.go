@@ -14,7 +14,6 @@ func BuildEntrypoint(script string, args []string) string {
 	}
 	body := strings.Join([]string{
 		"set -euxo pipefail",
-		"cd /verl",
 		strings.Join(cmd, " "),
 	}, "\n")
 	return "bash -lc " + shellQuote(body)
