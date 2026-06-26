@@ -13,6 +13,7 @@ submitter 只负责：
 - 查询 RayJob 状态
 - 输出 `/watch` 事件流
 - 按 workflow run attempt 清理 RayJob
+- 后台清理超过 TTL 的残留 RayJob
 
 submitter 不理解 PPO/GRPO/MindSpeed 业务逻辑，不接收 raw shell，不接收任意 Kubernetes YAML，不执行 `kubectl`。
 
@@ -34,6 +35,7 @@ flowchart TD
     cluster --> jobpod[RayJob submitter Pod]
     submitter -->|watch status| rayjob
     submitter -->|stream logs| jobpod
+    submitter -->|periodic stale cleanup| rayjob
 ```
 
 ## 模板 Patch
@@ -126,6 +128,16 @@ NDJSON 每行一个 JSON object：
 
 清理某次 workflow attempt 创建的所有 RayJob。RayJob CR 完成后不会自动消失，workflow 最后应调用该接口。
 
+## 残留任务清理
+
+workflow DELETE 是主清理路径。为防止 GitHub 网页端强制终止导致 cleanup step 未执行，服务默认启用后台 stale cleanup：
+
+- 每 `STALE_RAYJOB_CLEANUP_INTERVAL_SECONDS` 秒扫描一次。
+- 只处理带 `ci.verl/job-id` 标签的 RayJob。
+- 当 `metadata.creationTimestamp` 距当前时间超过 `STALE_RAYJOB_TTL_SECONDS` 时删除。
+- 不区分 RayJob 当前状态，`RUNNING/PENDING/SUCCEEDED/FAILED/UNKNOWN` 均按 TTL 清理。
+- 删除使用现有 `rayjobs list/delete` 权限，不需要额外 RBAC。
+
 ## Watch 行为
 
 `/watch` 内部并发执行：
@@ -181,6 +193,9 @@ ALLOWED_IMAGE_PREFIXES=quay.io/ascend/verl:,quay.io/albert54/verl-ci:
 LOG_HEAD_WAIT_SECONDS=1800
 WATCH_TIMEOUT_SECONDS=12600
 STATUS_POLL_SECONDS=30
+STALE_RAYJOB_CLEANUP_ENABLED=true
+STALE_RAYJOB_TTL_SECONDS=21600
+STALE_RAYJOB_CLEANUP_INTERVAL_SECONDS=600
 ALLOWED_SCRIPT_PREFIXES=tests/special_npu/,tests/special_e2e/,examples/data_preprocess/,/root/.cache/cicd_test/
 MAX_ARGS=64
 MAX_ARG_LENGTH=1024

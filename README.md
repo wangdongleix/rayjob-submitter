@@ -88,6 +88,7 @@ flowchart LR
     Workflow --> Cleanup
     Cleanup --> Submitter
     Submitter -->|"删除本次 workflow attempt 的 RayJob"| RayJob
+    Submitter -->|"后台清理超过 TTL 的残留 RayJob"| RayJob
 ```
 
 ## Configuration
@@ -104,6 +105,9 @@ flowchart LR
 | `LOG_HEAD_WAIT_SECONDS` | `1800` |
 | `WATCH_TIMEOUT_SECONDS` | `12600` |
 | `STATUS_POLL_SECONDS` | `30` |
+| `STALE_RAYJOB_CLEANUP_ENABLED` | `true` |
+| `STALE_RAYJOB_TTL_SECONDS` | `21600` |
+| `STALE_RAYJOB_CLEANUP_INTERVAL_SECONDS` | `600` |
 | `ALLOWED_SCRIPT_PREFIXES` | `tests/special_npu/,tests/special_e2e/,examples/data_preprocess/,/root/.cache/cicd_test/` |
 | `MAX_ARGS` | `64` |
 | `MAX_ARG_LENGTH` | `1024` |
@@ -159,6 +163,8 @@ Cleanup:
 curl -sS -X DELETE \
   "${SUBMITTER_URL}/api/v1/workflows/${GITHUB_RUN_ID}?attempt=${GITHUB_RUN_ATTEMPT}"
 ```
+
+The workflow cleanup call is the primary cleanup path. The service also runs a background stale RayJob cleanup loop by default: every 600 seconds it deletes submitter-managed RayJobs with the `ci.verl/job-id` label that are older than 21600 seconds. This is a fallback for workflow attempts that are stopped from the GitHub UI before the DELETE step runs.
 
 ## Multinode Wrapper
 

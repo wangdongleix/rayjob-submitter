@@ -8,6 +8,7 @@
 - 2026-06-09T00:00Z [USER] Superseded: restore image and script prefix checks, both supporting multiple comma-separated prefixes; script must support absolute and relative paths.
 - 2026-06-10T00:00Z [USER] Do not restrict branch names beyond basic character validation; PR merge refs like 6672/merge must pass.
 - 2026-06-25T12:49Z [USER] RayJob submitter should not force `cd /verl`; workflow/wrapper scripts own repository preparation and working-directory selection.
+- 2026-06-26T01:42Z [USER] Add service-side stale RayJob cleanup for workflow attempts stopped from the GitHub UI before DELETE runs; default policy is all submitter-managed RayJobs older than 6h.
 
 [PROGRESS]
 - 2026-06-09T00:00Z [CODE] Added initial continuity file for the workspace because none existed.
@@ -19,6 +20,7 @@
 - 2026-06-09T00:00Z [CODE] Restored ALLOWED_IMAGE_PREFIXES and ALLOWED_SCRIPT_PREFIXES list configs; validation now accepts any configured prefix and script clean path may be absolute or relative.
 - 2026-06-10T00:00Z [CODE] Removed main/v0.* branch allowlist from submit validation and documented the relaxed branch rule.
 - 2026-06-25T12:49Z [CODE] Removed hard-coded `cd /verl` from BuildEntrypoint and updated tests/design docs to describe script-owned working-directory handling.
+- 2026-06-26T01:42Z [CODE] Added configurable background stale RayJob cleanup loop, Kubernetes stale deletion helper, deployment env defaults, docs, and unit tests.
 
 [DISCOVERIES]
 - 2026-06-09T00:00Z [TOOL] Static checks passed: bash -n for both shell scripts and Ruby YAML parse for the new workflow.
@@ -26,5 +28,6 @@
 - 2026-06-09T00:00Z [TOOL] gofmt, go test ./..., go vet ./..., go build ./cmd/rayjob-submitter, and YAML parse for the verl workflow passed after removing token/prefix restrictions.
 - 2026-06-09T00:00Z [TOOL] gofmt, go test ./..., go vet ./..., and go build ./cmd/rayjob-submitter passed after restoring multi-prefix validation.
 - 2026-06-10T00:00Z [TOOL] gofmt, go test ./..., go vet ./..., and go build ./cmd/rayjob-submitter passed after branch validation relaxation.
+- 2026-06-26T01:42Z [TOOL] gofmt, go test ./..., go vet ./..., go build ./cmd/rayjob-submitter, and Ruby YAML parse for deploy manifests passed after adding stale RayJob cleanup.
 
 [OUTCOMES]

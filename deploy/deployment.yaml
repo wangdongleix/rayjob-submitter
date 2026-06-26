@@ -43,6 +43,12 @@ spec:
               value: "12600"
             - name: STATUS_POLL_SECONDS
               value: "30"
+            - name: STALE_RAYJOB_CLEANUP_ENABLED
+              value: "true"
+            - name: STALE_RAYJOB_TTL_SECONDS
+              value: "21600"
+            - name: STALE_RAYJOB_CLEANUP_INTERVAL_SECONDS
+              value: "600"
             - name: ALLOWED_SCRIPT_PREFIXES
               value: "tests/special_npu/,tests/special_e2e/,examples/data_preprocess/,/root/.cache/,/verl"
             - name: MAX_ARGS

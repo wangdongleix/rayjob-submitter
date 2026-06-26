@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -16,6 +15,9 @@ import (
 )
 
 func main() {
+	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("load config: %v", err)
@@ -25,7 +27,7 @@ func main() {
 		log.Fatalf("create kubernetes clients: %v", err)
 	}
 	log.Printf("checking kubernetes permissions in namespace %s", cfg.TargetNamespace)
-	checkCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	checkCtx, cancel := context.WithTimeout(rootCtx, 10*time.Second)
 	defer cancel()
 	if err := kube.CheckPermissions(checkCtx, typedClient, cfg.TargetNamespace); err != nil {
 		log.Fatalf("check kubernetes permissions: %v", err)
@@ -43,6 +45,8 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	go app.RunStaleRayJobCleanup(rootCtx)
+
 	go func() {
 		log.Printf("rayjob-submitter listening on %s", cfg.ListenAddr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -50,9 +54,8 @@ func main() {
 		}
 	}()
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
+	<-rootCtx.Done()
+	stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

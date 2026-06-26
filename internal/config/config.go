@@ -18,6 +18,9 @@ type Config struct {
 	LogHeadWaitSeconds    int
 	WatchTimeoutSeconds   int
 	StatusPollSeconds     int
+	StaleCleanupEnabled   bool
+	StaleCleanupTTL       int
+	StaleCleanupInterval  int
 	AllowedScriptPrefixes []string
 	MaxArgs               int
 	MaxArgLength          int
@@ -36,6 +39,9 @@ const (
 	defaultLogHeadWaitSeconds    = 1800
 	defaultWatchTimeoutSeconds   = 12600
 	defaultStatusPollSeconds     = 30
+	defaultStaleCleanupEnabled   = true
+	defaultStaleCleanupTTL       = 21600
+	defaultStaleCleanupInterval  = 600
 	defaultAllowedScriptPrefixes = "tests/special_npu/,tests/special_e2e/,examples/data_preprocess/,/root/.cache/cicd_test/"
 	defaultMaxArgs               = 64
 	defaultMaxArgLength          = 1024
@@ -61,6 +67,18 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	statusPollSeconds, err := intEnv("STATUS_POLL_SECONDS", defaultStatusPollSeconds)
+	if err != nil {
+		return Config{}, err
+	}
+	staleCleanupEnabled, err := boolEnv("STALE_RAYJOB_CLEANUP_ENABLED", defaultStaleCleanupEnabled)
+	if err != nil {
+		return Config{}, err
+	}
+	staleCleanupTTL, err := intEnv("STALE_RAYJOB_TTL_SECONDS", defaultStaleCleanupTTL)
+	if err != nil {
+		return Config{}, err
+	}
+	staleCleanupInterval, err := intEnv("STALE_RAYJOB_CLEANUP_INTERVAL_SECONDS", defaultStaleCleanupInterval)
 	if err != nil {
 		return Config{}, err
 	}
@@ -91,6 +109,9 @@ func Load() (Config, error) {
 		LogHeadWaitSeconds:    logHeadWaitSeconds,
 		WatchTimeoutSeconds:   watchTimeoutSeconds,
 		StatusPollSeconds:     statusPollSeconds,
+		StaleCleanupEnabled:   staleCleanupEnabled,
+		StaleCleanupTTL:       staleCleanupTTL,
+		StaleCleanupInterval:  staleCleanupInterval,
 		AllowedScriptPrefixes: listEnv("ALLOWED_SCRIPT_PREFIXES", defaultAllowedScriptPrefixes),
 		MaxArgs:               maxArgs,
 		MaxArgLength:          maxArgLength,
@@ -128,6 +149,12 @@ func (c Config) Validate() error {
 	if c.StatusPollSeconds <= 0 {
 		return fmt.Errorf("STATUS_POLL_SECONDS must be positive")
 	}
+	if c.StaleCleanupTTL <= 0 {
+		return fmt.Errorf("STALE_RAYJOB_TTL_SECONDS must be positive")
+	}
+	if c.StaleCleanupInterval <= 0 {
+		return fmt.Errorf("STALE_RAYJOB_CLEANUP_INTERVAL_SECONDS must be positive")
+	}
 	if len(c.AllowedScriptPrefixes) == 0 {
 		return fmt.Errorf("ALLOWED_SCRIPT_PREFIXES is required")
 	}
@@ -152,6 +179,18 @@ func intEnv(name string, defaultValue int) (int, error) {
 	parsed, err := strconv.Atoi(v)
 	if err != nil {
 		return 0, fmt.Errorf("%s must be an integer", name)
+	}
+	return parsed, nil
+}
+
+func boolEnv(name string, defaultValue bool) (bool, error) {
+	v := os.Getenv(name)
+	if v == "" {
+		return defaultValue, nil
+	}
+	parsed, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("%s must be a boolean", name)
 	}
 	return parsed, nil
 }
