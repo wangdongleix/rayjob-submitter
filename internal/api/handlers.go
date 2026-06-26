@@ -40,19 +40,20 @@ func (s *Server) submitRayJob(w http.ResponseWriter, r *http.Request) {
 
 	jobID := rayjob.JobID(req.GitHubRunID, req.GitHubRunAttempt, time.Now().UTC().UnixMilli(), req.NameSuffix)
 	obj, err := rayjob.PatchRayJobTemplate(s.rayJobTemplate, rayjob.RenderParams{
-		JobID:          jobID,
-		Namespace:      s.cfg.TargetNamespace,
-		Repository:     req.Repository,
-		CommitSHA:      req.CommitSHA,
-		Branch:         req.Branch,
-		GitHubRunID:    req.GitHubRunID,
-		GitHubAttempt:  req.GitHubRunAttempt,
-		Image:          req.Image,
-		NameSuffix:     req.NameSuffix,
-		Script:         req.Script,
-		Args:           req.Args,
-		Env:            req.Env,
-		WorkerReplicas: req.WorkerReplicas,
+		JobID:           jobID,
+		Namespace:       s.cfg.TargetNamespace,
+		Repository:      req.Repository,
+		CommitSHA:       req.CommitSHA,
+		Branch:          req.Branch,
+		GitHubRunID:     req.GitHubRunID,
+		GitHubAttempt:   req.GitHubRunAttempt,
+		Image:           req.Image,
+		NameSuffix:      req.NameSuffix,
+		Script:          req.Script,
+		Args:            req.Args,
+		Env:             req.Env,
+		WorkerReplicas:  req.WorkerReplicas,
+		TemplatePatches: req.TemplatePatches,
 	})
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "failed to render RayJob", Message: err.Error()})
@@ -397,14 +398,15 @@ func (fw flushWriter) Write(p []byte) (int, error) {
 
 func auditFields(req submitRayJobRequest, jobID string) map[string]any {
 	return map[string]any{
-		"job_id":          jobID,
-		"repository":      req.Repository,
-		"commit_sha":      req.CommitSHA,
-		"branch":          req.Branch,
-		"github_run_id":   req.GitHubRunID,
-		"image":           req.Image,
-		"name_suffix":     req.NameSuffix,
-		"script":          req.Script,
-		"worker_replicas": req.WorkerReplicas,
+		"job_id":           jobID,
+		"repository":       req.Repository,
+		"commit_sha":       req.CommitSHA,
+		"branch":           req.Branch,
+		"github_run_id":    req.GitHubRunID,
+		"image":            req.Image,
+		"name_suffix":      req.NameSuffix,
+		"script":           req.Script,
+		"worker_replicas":  req.WorkerReplicas,
+		"template_patches": len(req.TemplatePatches),
 	}
 }

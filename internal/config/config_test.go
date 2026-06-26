@@ -11,6 +11,8 @@ func TestLoadStaleCleanupDefaults(t *testing.T) {
 		"STALE_RAYJOB_CLEANUP_ENABLED",
 		"STALE_RAYJOB_TTL_SECONDS",
 		"STALE_RAYJOB_CLEANUP_INTERVAL_SECONDS",
+		"MAX_TEMPLATE_PATCHES",
+		"MAX_TEMPLATE_PATCH_VALUE_LENGTH",
 	)
 
 	cfg, err := Load()
@@ -19,6 +21,9 @@ func TestLoadStaleCleanupDefaults(t *testing.T) {
 	}
 	if !cfg.StaleCleanupEnabled || cfg.StaleCleanupTTL != 21600 || cfg.StaleCleanupInterval != 600 {
 		t.Fatalf("stale cleanup defaults = enabled:%t ttl:%d interval:%d", cfg.StaleCleanupEnabled, cfg.StaleCleanupTTL, cfg.StaleCleanupInterval)
+	}
+	if cfg.MaxTemplatePatches != 32 || cfg.MaxTemplatePatchValueLength != 2048 {
+		t.Fatalf("template patch defaults = patches:%d value_length:%d", cfg.MaxTemplatePatches, cfg.MaxTemplatePatchValueLength)
 	}
 }
 
@@ -66,6 +71,12 @@ func TestValidateRejectsInvalidStaleCleanupDurations(t *testing.T) {
 	cfg.StaleCleanupInterval = 0
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "STALE_RAYJOB_CLEANUP_INTERVAL_SECONDS") {
 		t.Fatalf("interval validation error = %v", err)
+	}
+
+	cfg.StaleCleanupInterval = 600
+	cfg.MaxTemplatePatchValueLength = 0
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "template patch limits") {
+		t.Fatalf("template patch validation error = %v", err)
 	}
 }
 

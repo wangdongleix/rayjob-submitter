@@ -27,10 +27,12 @@ func testConfig() config.Config {
 			"examples/data_preprocess/",
 			"/root/.cache/cicd_test/",
 		},
-		MaxArgs:           64,
-		MaxArgLength:      1024,
-		MaxExtraEnv:       64,
-		MaxEnvValueLength: 2048,
+		MaxArgs:                     64,
+		MaxArgLength:                1024,
+		MaxExtraEnv:                 64,
+		MaxEnvValueLength:           2048,
+		MaxTemplatePatches:          32,
+		MaxTemplatePatchValueLength: 2048,
 	}
 }
 
@@ -81,6 +83,35 @@ func TestValidateSubmitRequestAllowsPullRequestMergeBranch(t *testing.T) {
 	}
 }
 
+func TestValidateSubmitRequestAllowsTemplatePatches(t *testing.T) {
+	req := validRequest()
+	req.TemplatePatches = []TemplatePatch{
+		{
+			Op:    "replace",
+			Path:  "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/limits/memory",
+			Value: "160Gi",
+		},
+		{
+			Op:    "replace",
+			Path:  "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/volumes/1/emptyDir/sizeLimit",
+			Value: "96Gi",
+		},
+		{
+			Op:    "add",
+			Path:  "/spec/rayClusterSpec/workerGroupSpecs/0/rayStartParams/memory-usage-threshold",
+			Value: "0.98",
+		},
+		{
+			Op:    "add",
+			Path:  "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/env/-",
+			Value: map[string]any{"name": "RAY_MEMORY_USAGE_THRESHOLD", "value": "0.98"},
+		},
+	}
+	if err := ValidateSubmitRequest(req, testConfig()); err != nil {
+		t.Fatalf("expected valid request, got %v", err)
+	}
+}
+
 func TestValidateSubmitRequestRejectsInvalidFields(t *testing.T) {
 	tests := []struct {
 		name string
@@ -104,6 +135,24 @@ func TestValidateSubmitRequestRejectsInvalidFields(t *testing.T) {
 		{"arg shell", func(r *SubmitRequest) { r.Args = []string{"a;b"} }},
 		{"env key", func(r *SubmitRequest) { r.Env = map[string]string{"bad-key": "x"} }},
 		{"protected env", func(r *SubmitRequest) { r.Env = map[string]string{"PYTHONPATH": "x"} }},
+		{"template patch op", func(r *SubmitRequest) {
+			r.TemplatePatches = []TemplatePatch{{Op: "remove", Path: "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/limits/memory"}}
+		}},
+		{"template patch image", func(r *SubmitRequest) {
+			r.TemplatePatches = []TemplatePatch{{Op: "replace", Path: "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/image", Value: "bad"}}
+		}},
+		{"template patch entrypoint", func(r *SubmitRequest) {
+			r.TemplatePatches = []TemplatePatch{{Op: "replace", Path: "/spec/entrypoint", Value: "bad"}}
+		}},
+		{"template patch host path", func(r *SubmitRequest) {
+			r.TemplatePatches = []TemplatePatch{{Op: "replace", Path: "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/volumes/0/hostPath/path", Value: "/tmp"}}
+		}},
+		{"template patch bad quantity", func(r *SubmitRequest) {
+			r.TemplatePatches = []TemplatePatch{{Op: "replace", Path: "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/limits/memory", Value: "a lot"}}
+		}},
+		{"template patch protected env", func(r *SubmitRequest) {
+			r.TemplatePatches = []TemplatePatch{{Op: "add", Path: "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/env/-", Value: map[string]any{"name": "PYTHONPATH", "value": "x"}}}
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

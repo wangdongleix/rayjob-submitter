@@ -8,45 +8,49 @@ import (
 )
 
 type Config struct {
-	ListenAddr            string
-	TargetNamespace       string
-	WorkerReplicas        int
-	MaxWorkerReplicas     int
-	AllowedRepository     string
-	AllowedImagePrefixes  []string
-	RayJobTemplatePath    string
-	LogHeadWaitSeconds    int
-	WatchTimeoutSeconds   int
-	StatusPollSeconds     int
-	StaleCleanupEnabled   bool
-	StaleCleanupTTL       int
-	StaleCleanupInterval  int
-	AllowedScriptPrefixes []string
-	MaxArgs               int
-	MaxArgLength          int
-	MaxExtraEnv           int
-	MaxEnvValueLength     int
+	ListenAddr                  string
+	TargetNamespace             string
+	WorkerReplicas              int
+	MaxWorkerReplicas           int
+	AllowedRepository           string
+	AllowedImagePrefixes        []string
+	RayJobTemplatePath          string
+	LogHeadWaitSeconds          int
+	WatchTimeoutSeconds         int
+	StatusPollSeconds           int
+	StaleCleanupEnabled         bool
+	StaleCleanupTTL             int
+	StaleCleanupInterval        int
+	AllowedScriptPrefixes       []string
+	MaxArgs                     int
+	MaxArgLength                int
+	MaxExtraEnv                 int
+	MaxEnvValueLength           int
+	MaxTemplatePatches          int
+	MaxTemplatePatchValueLength int
 }
 
 const (
-	defaultListenAddr            = ":8080"
-	defaultTargetNamespace       = "ray"
-	defaultWorkerReplicas        = 2
-	defaultMaxWorkerReplicas     = 2
-	defaultAllowedRepository     = "verl-project/verl"
-	defaultAllowedImagePrefixes  = "quay.io/ascend/verl:,quay.io/albert54/verl-ci:"
-	defaultRayJobTemplatePath    = "templates/verl-rayjob.yaml"
-	defaultLogHeadWaitSeconds    = 1800
-	defaultWatchTimeoutSeconds   = 12600
-	defaultStatusPollSeconds     = 30
-	defaultStaleCleanupEnabled   = true
-	defaultStaleCleanupTTL       = 21600
-	defaultStaleCleanupInterval  = 600
-	defaultAllowedScriptPrefixes = "tests/special_npu/,tests/special_e2e/,examples/data_preprocess/,/root/.cache/cicd_test/"
-	defaultMaxArgs               = 64
-	defaultMaxArgLength          = 1024
-	defaultMaxExtraEnv           = 64
-	defaultMaxEnvValueLength     = 2048
+	defaultListenAddr                  = ":8080"
+	defaultTargetNamespace             = "ray"
+	defaultWorkerReplicas              = 2
+	defaultMaxWorkerReplicas           = 2
+	defaultAllowedRepository           = "verl-project/verl"
+	defaultAllowedImagePrefixes        = "quay.io/ascend/verl:,quay.io/albert54/verl-ci:"
+	defaultRayJobTemplatePath          = "templates/verl-rayjob.yaml"
+	defaultLogHeadWaitSeconds          = 1800
+	defaultWatchTimeoutSeconds         = 12600
+	defaultStatusPollSeconds           = 30
+	defaultStaleCleanupEnabled         = true
+	defaultStaleCleanupTTL             = 21600
+	defaultStaleCleanupInterval        = 600
+	defaultAllowedScriptPrefixes       = "tests/special_npu/,tests/special_e2e/,examples/data_preprocess/,/root/.cache/cicd_test/"
+	defaultMaxArgs                     = 64
+	defaultMaxArgLength                = 1024
+	defaultMaxExtraEnv                 = 64
+	defaultMaxEnvValueLength           = 2048
+	defaultMaxTemplatePatches          = 32
+	defaultMaxTemplatePatchValueLength = 2048
 )
 
 func Load() (Config, error) {
@@ -98,25 +102,35 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	maxTemplatePatches, err := intEnv("MAX_TEMPLATE_PATCHES", defaultMaxTemplatePatches)
+	if err != nil {
+		return Config{}, err
+	}
+	maxTemplatePatchValueLength, err := intEnv("MAX_TEMPLATE_PATCH_VALUE_LENGTH", defaultMaxTemplatePatchValueLength)
+	if err != nil {
+		return Config{}, err
+	}
 	cfg := Config{
-		ListenAddr:            stringEnv("LISTEN_ADDR", defaultListenAddr),
-		TargetNamespace:       stringEnv("TARGET_NAMESPACE", defaultTargetNamespace),
-		WorkerReplicas:        workerReplicas,
-		MaxWorkerReplicas:     maxWorkerReplicas,
-		AllowedRepository:     stringEnv("ALLOWED_REPOSITORY", defaultAllowedRepository),
-		AllowedImagePrefixes:  listEnv("ALLOWED_IMAGE_PREFIXES", defaultAllowedImagePrefixes),
-		RayJobTemplatePath:    stringEnv("RAYJOB_TEMPLATE_PATH", defaultRayJobTemplatePath),
-		LogHeadWaitSeconds:    logHeadWaitSeconds,
-		WatchTimeoutSeconds:   watchTimeoutSeconds,
-		StatusPollSeconds:     statusPollSeconds,
-		StaleCleanupEnabled:   staleCleanupEnabled,
-		StaleCleanupTTL:       staleCleanupTTL,
-		StaleCleanupInterval:  staleCleanupInterval,
-		AllowedScriptPrefixes: listEnv("ALLOWED_SCRIPT_PREFIXES", defaultAllowedScriptPrefixes),
-		MaxArgs:               maxArgs,
-		MaxArgLength:          maxArgLength,
-		MaxExtraEnv:           maxExtraEnv,
-		MaxEnvValueLength:     maxEnvValueLength,
+		ListenAddr:                  stringEnv("LISTEN_ADDR", defaultListenAddr),
+		TargetNamespace:             stringEnv("TARGET_NAMESPACE", defaultTargetNamespace),
+		WorkerReplicas:              workerReplicas,
+		MaxWorkerReplicas:           maxWorkerReplicas,
+		AllowedRepository:           stringEnv("ALLOWED_REPOSITORY", defaultAllowedRepository),
+		AllowedImagePrefixes:        listEnv("ALLOWED_IMAGE_PREFIXES", defaultAllowedImagePrefixes),
+		RayJobTemplatePath:          stringEnv("RAYJOB_TEMPLATE_PATH", defaultRayJobTemplatePath),
+		LogHeadWaitSeconds:          logHeadWaitSeconds,
+		WatchTimeoutSeconds:         watchTimeoutSeconds,
+		StatusPollSeconds:           statusPollSeconds,
+		StaleCleanupEnabled:         staleCleanupEnabled,
+		StaleCleanupTTL:             staleCleanupTTL,
+		StaleCleanupInterval:        staleCleanupInterval,
+		AllowedScriptPrefixes:       listEnv("ALLOWED_SCRIPT_PREFIXES", defaultAllowedScriptPrefixes),
+		MaxArgs:                     maxArgs,
+		MaxArgLength:                maxArgLength,
+		MaxExtraEnv:                 maxExtraEnv,
+		MaxEnvValueLength:           maxEnvValueLength,
+		MaxTemplatePatches:          maxTemplatePatches,
+		MaxTemplatePatchValueLength: maxTemplatePatchValueLength,
 	}
 	return cfg, cfg.Validate()
 }
@@ -160,6 +174,9 @@ func (c Config) Validate() error {
 	}
 	if c.MaxArgs < 0 || c.MaxArgLength <= 0 || c.MaxExtraEnv < 0 || c.MaxEnvValueLength <= 0 {
 		return fmt.Errorf("argument and env limits must be valid")
+	}
+	if c.MaxTemplatePatches < 0 || c.MaxTemplatePatchValueLength <= 0 {
+		return fmt.Errorf("template patch limits must be valid")
 	}
 	return nil
 }

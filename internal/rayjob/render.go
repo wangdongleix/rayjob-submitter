@@ -13,19 +13,20 @@ import (
 )
 
 type RenderParams struct {
-	JobID          string
-	Namespace      string
-	Repository     string
-	CommitSHA      string
-	Branch         string
-	GitHubRunID    string
-	GitHubAttempt  string
-	Image          string
-	NameSuffix     string
-	Script         string
-	Args           []string
-	Env            map[string]string
-	WorkerReplicas int
+	JobID           string
+	Namespace       string
+	Repository      string
+	CommitSHA       string
+	Branch          string
+	GitHubRunID     string
+	GitHubAttempt   string
+	Image           string
+	NameSuffix      string
+	Script          string
+	Args            []string
+	Env             map[string]string
+	WorkerReplicas  int
+	TemplatePatches []TemplatePatch
 }
 
 func LoadRayJobTemplate(path string) (*unstructured.Unstructured, error) {
@@ -68,6 +69,9 @@ func PatchRayJobTemplate(template *unstructured.Unstructured, p RenderParams) (*
 		return nil, err
 	}
 	if err := patchWorkerGroups(obj, p); err != nil {
+		return nil, err
+	}
+	if err := ApplyTemplatePatches(obj, p.TemplatePatches); err != nil {
 		return nil, err
 	}
 	return obj, nil

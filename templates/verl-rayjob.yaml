@@ -159,7 +159,7 @@ spec:
                       - name: dshm
                         emptyDir:
                             medium: Memory
-                            sizeLimit: "64Gi" # Worker 内存总共 128G，分配 64G 给 shm
+                            sizeLimit: "128Gi" # Worker 内存总共 256G，分配 128G 给 shm
                       # 核心注入：声明宿主机 npu-smi 工具及其依赖的底层驱动库卷
                       - name: host-npu-smi
                         hostPath:
@@ -233,10 +233,10 @@ spec:
 
                         resources:
                             requests:
-                                cpu: "32"
-                                memory: "128Gi"
-                                huawei.com/ascend-1980: "8"
+                                cpu: "64"
+                                memory: "256Gi"
+                                huawei.com/ascend-1980: "16"
                             limits:
-                                cpu: "32"
-                                memory: "128Gi"
-                                huawei.com/ascend-1980: "8"
+                                cpu: "64"
+                                memory: "256Gi"
+                                huawei.com/ascend-1980: "16"

@@ -49,8 +49,9 @@ flowchart TD
 - head / worker 容器 image/env
 - head / worker Pod labels
 - worker `replicas/minReplicas/maxReplicas`
+- 请求中的安全 `template_patches` 白名单路径
 
-保留模板里的 NPU hostPath、NFS cache、`/dev/shm`、Ascend env、`PYTHONPATH`、resources、nodeSelector、workingDir、imagePullPolicy。
+保留模板里的 NPU hostPath、NFS cache、Ascend env、`PYTHONPATH`、nodeSelector、workingDir、imagePullPolicy。resources、`/dev/shm` sizeLimit、rayStartParams 和部分 env 可通过安全 `template_patches` 调整。
 
 `entrypoint` 由 `script + args` 生成：
 
@@ -79,7 +80,14 @@ bash/python <script> <args...>'
   "script": "tests/special_npu/run_qwen3_06b_ppo_multinode.sh",
   "args": [],
   "env": {},
-  "worker_replicas": 2
+  "worker_replicas": 2,
+  "template_patches": [
+    {
+      "op": "replace",
+      "path": "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/limits/memory",
+      "value": "160Gi"
+    }
+  ]
 }
 ```
 
@@ -179,6 +187,7 @@ ci.github.com/run-attempt=<github_run_attempt>
 - `env` key 必须匹配 `^[A-Z_][A-Z0-9_]{0,63}$`
 - `env` 禁止覆盖 `PATH/HOME/PYTHONPATH/LD_LIBRARY_PATH/RAY_ADDRESS/RAY_HEAD_SERVICE_HOST`
 - `worker_replicas` 必须大于 0 且不超过 `MAX_WORKER_REPLICAS`
+- `template_patches` 仅支持 `add/replace`，路径必须命中安全白名单，quantity 字段必须是合法 Kubernetes quantity
 
 ## 配置
 
@@ -201,7 +210,27 @@ MAX_ARGS=64
 MAX_ARG_LENGTH=1024
 MAX_EXTRA_ENV=64
 MAX_ENV_VALUE_LENGTH=2048
+MAX_TEMPLATE_PATCHES=32
+MAX_TEMPLATE_PATCH_VALUE_LENGTH=2048
 ```
+
+## Template Patches
+
+`template_patches` 是受限 JSON Patch，不是任意 RayJob YAML patch。第一版只允许资源和运行参数相关路径：
+
+- submitter/head/worker 容器 `resources.requests/*` 和 `resources.limits/*`
+- head/worker `dshm` volume 的 `emptyDir.sizeLimit`
+- head/worker `rayStartParams/*`
+- head/worker 容器 env 追加，路径必须以 `/env/-` 结尾
+
+当前模板数组索引固定为：
+
+- submitter container: `/spec/submitterPodTemplate/spec/containers/0`
+- head container: `/spec/rayClusterSpec/headGroupSpec/template/spec/containers/0`
+- head dshm volume: `/spec/rayClusterSpec/headGroupSpec/template/spec/volumes/1`
+- worker group: `/spec/rayClusterSpec/workerGroupSpecs/0`
+- worker container: `/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0`
+- worker dshm volume: `/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/volumes/1`
 
 ## RBAC
 

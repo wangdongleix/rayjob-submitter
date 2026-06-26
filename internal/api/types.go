@@ -1,17 +1,20 @@
 package api
 
+import "github.com/verl-project/rayjob-submitter/internal/rayjob"
+
 type submitRayJobRequest struct {
-	Repository       string            `json:"repository"`
-	CommitSHA        string            `json:"commit_sha"`
-	Branch           string            `json:"branch"`
-	GitHubRunID      string            `json:"github_run_id"`
-	GitHubRunAttempt string            `json:"github_run_attempt"`
-	Image            string            `json:"image"`
-	NameSuffix       string            `json:"name_suffix"`
-	Script           string            `json:"script"`
-	Args             []string          `json:"args"`
-	Env              map[string]string `json:"env"`
-	WorkerReplicas   int               `json:"worker_replicas"`
+	Repository       string                 `json:"repository"`
+	CommitSHA        string                 `json:"commit_sha"`
+	Branch           string                 `json:"branch"`
+	GitHubRunID      string                 `json:"github_run_id"`
+	GitHubRunAttempt string                 `json:"github_run_attempt"`
+	Image            string                 `json:"image"`
+	NameSuffix       string                 `json:"name_suffix"`
+	Script           string                 `json:"script"`
+	Args             []string               `json:"args"`
+	Env              map[string]string      `json:"env"`
+	WorkerReplicas   int                    `json:"worker_replicas"`
+	TemplatePatches  []rayjob.TemplatePatch `json:"template_patches"`
 }
 
 type submitRayJobResponse struct {

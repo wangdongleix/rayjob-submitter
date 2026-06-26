@@ -43,6 +43,7 @@ type SubmitRequest struct {
 	Args             []string
 	Env              map[string]string
 	WorkerReplicas   int
+	TemplatePatches  []TemplatePatch
 }
 
 func ValidateSubmitRequest(req SubmitRequest, cfg config.Config) error {
@@ -81,6 +82,9 @@ func ValidateSubmitRequest(req SubmitRequest, cfg config.Config) error {
 	}
 	if req.WorkerReplicas <= 0 || req.WorkerReplicas > cfg.MaxWorkerReplicas {
 		return fmt.Errorf("worker_replicas is not allowed")
+	}
+	if err := ValidateTemplatePatches(req.TemplatePatches, cfg); err != nil {
+		return err
 	}
 	return nil
 }

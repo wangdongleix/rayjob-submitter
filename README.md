@@ -2,7 +2,7 @@
 
 Internal HTTP service for GitHub Actions to submit, watch, and clean up KubeRay `RayJob` resources.
 
-The service is template-driven: it loads `templates/verl-rayjob.yaml`, deep-copies it per request, and only patches image, entrypoint, labels, env, and worker replicas.
+The service is template-driven: it loads `templates/verl-rayjob.yaml`, deep-copies it per request, and only patches image, entrypoint, labels, env, worker replicas, and whitelisted template paths requested through `template_patches`.
 
 ## Architecture
 ```mermaid
@@ -113,6 +113,8 @@ flowchart LR
 | `MAX_ARG_LENGTH` | `1024` |
 | `MAX_EXTRA_ENV` | `64` |
 | `MAX_ENV_VALUE_LENGTH` | `2048` |
+| `MAX_TEMPLATE_PATCHES` | `32` |
+| `MAX_TEMPLATE_PATCH_VALUE_LENGTH` | `2048` |
 
 ## Deployment
 
@@ -146,7 +148,24 @@ curl -sS -X POST "${SUBMITTER_URL}/api/v1/rayjobs" \
     "script": "tests/special_npu/run_qwen3_06b_ppo_multinode.sh",
     "args": [],
     "env": {},
-    "worker_replicas": 2
+    "worker_replicas": 2,
+    "template_patches": [
+      {
+        "op": "replace",
+        "path": "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/limits/memory",
+        "value": "160Gi"
+      },
+      {
+        "op": "replace",
+        "path": "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/volumes/1/emptyDir/sizeLimit",
+        "value": "96Gi"
+      },
+      {
+        "op": "add",
+        "path": "/spec/rayClusterSpec/workerGroupSpecs/0/rayStartParams/memory-usage-threshold",
+        "value": "0.98"
+      }
+    ]
   }'
 ```
 
@@ -165,6 +184,28 @@ curl -sS -X DELETE \
 ```
 
 The workflow cleanup call is the primary cleanup path. The service also runs a background stale RayJob cleanup loop by default: every 600 seconds it deletes submitter-managed RayJobs with the `ci.verl/job-id` label that are older than 21600 seconds. This is a fallback for workflow attempts that are stopped from the GitHub UI before the DELETE step runs.
+
+## Template Patches
+
+`template_patches` is a restricted JSON Patch surface for per-job tuning. It supports only `add` and `replace`, and only for whitelisted resource/runtime paths. It is not a raw RayJob YAML patch mechanism.
+
+Current template indexes:
+
+- submitter container: `/spec/submitterPodTemplate/spec/containers/0`
+- head container: `/spec/rayClusterSpec/headGroupSpec/template/spec/containers/0`
+- head dshm volume: `/spec/rayClusterSpec/headGroupSpec/template/spec/volumes/1`
+- worker group: `/spec/rayClusterSpec/workerGroupSpecs/0`
+- worker container: `/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0`
+- worker dshm volume: `/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/volumes/1`
+
+Allowed patches:
+
+- `resources.requests/*` and `resources.limits/*` on submitter/head/worker containers
+- `emptyDir.sizeLimit` on head/worker `dshm` volumes
+- head/worker `rayStartParams/*`
+- append head/worker container env with path ending in `/env/-`
+
+Disallowed patches include metadata, entrypoint, image, hostPath, volumeMounts, securityContext, serviceAccountName, nodeSelector, affinity, tolerations, and arbitrary volumes.
 
 ## Multinode Wrapper
 

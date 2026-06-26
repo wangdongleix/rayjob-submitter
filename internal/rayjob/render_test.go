@@ -28,6 +28,28 @@ func TestPatchRayJobTemplate(t *testing.T) {
 		Args:           []string{"--foo", "bar"},
 		Env:            map[string]string{"EXTRA_FLAG": "true"},
 		WorkerReplicas: 2,
+		TemplatePatches: []TemplatePatch{
+			{
+				Op:    "replace",
+				Path:  "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/limits/memory",
+				Value: "160Gi",
+			},
+			{
+				Op:    "replace",
+				Path:  "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/volumes/1/emptyDir/sizeLimit",
+				Value: "96Gi",
+			},
+			{
+				Op:    "add",
+				Path:  "/spec/rayClusterSpec/workerGroupSpecs/0/rayStartParams/memory-usage-threshold",
+				Value: "0.98",
+			},
+			{
+				Op:    "add",
+				Path:  "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/env/-",
+				Value: map[string]any{"name": "RAY_MEMORY_USAGE_THRESHOLD", "value": "0.98"},
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("patch template: %v", err)
@@ -67,12 +89,30 @@ func TestPatchRayJobTemplate(t *testing.T) {
 	if workerContainer["image"] != image {
 		t.Fatalf("worker image = %v", workerContainer["image"])
 	}
+	workerResources := workerContainer["resources"].(map[string]any)
+	workerLimits := workerResources["limits"].(map[string]any)
+	if workerLimits["memory"] != "160Gi" {
+		t.Fatalf("worker memory limit = %v", workerLimits["memory"])
+	}
+	workerVolumes := workerSpec["volumes"].([]any)
+	workerDshm := workerVolumes[1].(map[string]any)
+	workerEmptyDir := workerDshm["emptyDir"].(map[string]any)
+	if workerEmptyDir["sizeLimit"] != "96Gi" {
+		t.Fatalf("worker shm sizeLimit = %v", workerEmptyDir["sizeLimit"])
+	}
+	workerRayStartParams := worker["rayStartParams"].(map[string]any)
+	if workerRayStartParams["memory-usage-threshold"] != "0.98" {
+		t.Fatalf("worker rayStartParams = %#v", workerRayStartParams)
+	}
 	headLabels, _, _ := unstructured.NestedStringMap(obj.Object, "spec", "rayClusterSpec", "headGroupSpec", "template", "metadata", "labels")
 	if headLabels["ci.verl/job-id"] != "vrj-123-1-123456-train-step" || headLabels["ci.github.com/run-attempt"] != "1" {
 		t.Fatalf("head labels = %#v", headLabels)
 	}
 	if !hasEnv(submitter["env"].([]any), "EXTRA_FLAG", "true") || !hasEnv(head["env"].([]any), "EXTRA_FLAG", "true") || !hasEnv(workerContainer["env"].([]any), "EXTRA_FLAG", "true") {
 		t.Fatalf("extra env missing")
+	}
+	if !hasEnv(workerContainer["env"].([]any), "RAY_MEMORY_USAGE_THRESHOLD", "0.98") {
+		t.Fatalf("template patch env missing")
 	}
 }
 
