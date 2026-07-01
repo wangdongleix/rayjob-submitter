@@ -1,0 +1,2321 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>多机 Ascend CI 系统设计与接入指南</title>
+  <style>
+    :root {
+      --paper: #f7f3ea;
+      --panel: #fffdf8;
+      --ink: #172124;
+      --muted: #5f6d71;
+      --line: #d8d0c0;
+      --line-strong: #a99f8e;
+      --teal: #0f766e;
+      --teal-soft: #dff3ef;
+      --blue: #2457a6;
+      --blue-soft: #e3eefc;
+      --green: #287a50;
+      --green-soft: #e0f0e7;
+      --amber: #a46213;
+      --amber-soft: #f4ead6;
+      --red: #b54727;
+      --red-soft: #f6e3db;
+      --slate: #263238;
+      --code-bg: #162326;
+      --code-fg: #e8f1ef;
+      --shadow: 0 18px 50px rgba(31, 40, 37, 0.12);
+      --radius: 8px;
+      --content: 1160px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(90deg, rgba(23, 33, 36, 0.045) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(23, 33, 36, 0.035) 1px, transparent 1px),
+        var(--paper);
+      background-size: 44px 44px;
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration-thickness: 2px;
+      text-underline-offset: 3px;
+      overflow-wrap: anywhere;
+    }
+
+    code,
+    pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid rgba(23, 33, 36, 0.12);
+      background: rgba(247, 243, 234, 0.92);
+      backdrop-filter: blur(14px);
+    }
+
+    .topbar-inner {
+      width: min(100% - 32px, var(--content));
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      min-height: 58px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      color: var(--slate);
+      white-space: nowrap;
+    }
+
+    .brand-mark {
+      width: 26px;
+      height: 26px;
+      border: 2px solid var(--slate);
+      border-radius: 7px;
+      position: relative;
+      background: var(--teal-soft);
+    }
+
+    .brand-mark::before,
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      inset: 5px auto auto 5px;
+      width: 6px;
+      height: 6px;
+      background: var(--teal);
+      border-radius: 2px;
+      box-shadow: 10px 0 0 var(--amber), 5px 10px 0 var(--blue);
+    }
+
+    .nav-links {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px 14px;
+      font-size: 13px;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+    }
+
+    .nav-links a:hover {
+      color: var(--ink);
+    }
+
+    .hero {
+      width: min(100% - 32px, var(--content));
+      margin: 0 auto;
+      min-height: 650px;
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1.1fr);
+      align-items: center;
+      gap: 36px;
+      padding: 54px 0 46px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 10px;
+      border: 1px solid var(--line-strong);
+      background: rgba(255, 253, 248, 0.72);
+      color: var(--teal);
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .hero h1 {
+      margin: 20px 0 18px;
+      font-size: clamp(42px, 6vw, 76px);
+      line-height: 0.98;
+      letter-spacing: 0;
+      color: var(--ink);
+      max-width: 760px;
+    }
+
+    .hero .lead {
+      margin: 0;
+      max-width: 650px;
+      color: #3c4a4e;
+      font-size: 20px;
+      line-height: 1.75;
+    }
+
+    .hero-meta {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 30px;
+      max-width: 720px;
+    }
+
+    .metric {
+      min-height: 92px;
+      padding: 15px 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: 0 10px 28px rgba(31, 40, 37, 0.08);
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 25px;
+      line-height: 1.15;
+      color: var(--slate);
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .hero-visual {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .hero-visual svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .section {
+      width: min(100% - 32px, var(--content));
+      margin: 0 auto;
+      padding: 72px 0;
+    }
+
+    .band {
+      width: 100%;
+      max-width: none;
+      background: rgba(255, 253, 248, 0.66);
+      border-top: 1px solid rgba(23, 33, 36, 0.1);
+      border-bottom: 1px solid rgba(23, 33, 36, 0.1);
+      padding: 0;
+    }
+
+    .band > .section {
+      padding: 72px 0;
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, 0.7fr) minmax(280px, 0.3fr);
+      gap: 30px;
+      align-items: end;
+      margin-bottom: 30px;
+    }
+
+    .section h2 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 48px);
+      line-height: 1.08;
+      letter-spacing: 0;
+      color: var(--slate);
+    }
+
+    .section-kicker {
+      margin: 0 0 10px;
+      color: var(--teal);
+      font-size: 13px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .section-summary {
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, 0.52fr);
+      gap: 24px;
+      align-items: start;
+    }
+
+    .three-col {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: 0 12px 34px rgba(31, 40, 37, 0.08);
+      padding: 22px;
+    }
+
+    .panel.compact {
+      padding: 17px;
+    }
+
+    .panel h3 {
+      margin: 0 0 10px;
+      color: var(--slate);
+      font-size: 21px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .panel p {
+      margin: 0 0 12px;
+      color: #3e4b4f;
+    }
+
+    .panel p:last-child,
+    .panel ul:last-child,
+    .panel ol:last-child {
+      margin-bottom: 0;
+    }
+
+    .talk-track {
+      border-left: 5px solid var(--teal);
+      background: var(--teal-soft);
+      padding: 18px 20px;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      color: #244340;
+    }
+
+    .talk-track strong {
+      color: var(--teal);
+    }
+
+    .callout {
+      border-left: 5px solid var(--amber);
+      background: var(--amber-soft);
+      padding: 16px 18px;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      color: #4d3b1f;
+    }
+
+    .danger {
+      border-left-color: var(--red);
+      background: var(--red-soft);
+      color: #552819;
+    }
+
+    .diagram-wrap {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      margin-top: 24px;
+    }
+
+    .diagram-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #fbf6ec;
+      color: var(--slate);
+      font-weight: 900;
+    }
+
+    .diagram-title span {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .diagram-body {
+      padding: 12px;
+      overflow-x: auto;
+    }
+
+    .diagram-body svg {
+      display: block;
+      min-width: 920px;
+      width: 100%;
+      height: auto;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 0 18px 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      display: inline-block;
+      border: 1px solid rgba(23, 33, 36, 0.2);
+    }
+
+    .dot.teal { background: var(--teal-soft); }
+    .dot.blue { background: var(--blue-soft); }
+    .dot.green { background: var(--green-soft); }
+    .dot.amber { background: var(--amber-soft); }
+
+    .steps {
+      counter-reset: step;
+      display: grid;
+      gap: 12px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+      padding: 16px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .step::before {
+      counter-increment: step;
+      content: counter(step);
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      background: var(--slate);
+      color: #fff;
+      border-radius: 999px;
+      font-weight: 900;
+      font-size: 16px;
+    }
+
+    .step h3 {
+      margin: 0 0 4px;
+      font-size: 18px;
+      line-height: 1.25;
+    }
+
+    .step p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .code-block {
+      margin: 16px 0;
+      background: var(--code-bg);
+      color: var(--code-fg);
+      border-radius: var(--radius);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      overflow: hidden;
+      box-shadow: 0 14px 34px rgba(22, 35, 38, 0.18);
+    }
+
+    .code-block .code-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #b7d5d0;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .code-block .code-title span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    pre {
+      margin: 0;
+      padding: 16px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.62;
+      white-space: pre;
+    }
+
+    code {
+      font-size: 0.95em;
+    }
+
+    p code,
+    li code,
+    td code {
+      color: #134e4a;
+      background: rgba(15, 118, 110, 0.1);
+      border: 1px solid rgba(15, 118, 110, 0.14);
+      border-radius: 5px;
+      padding: 1px 5px;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: block;
+    }
+
+    thead,
+    tbody,
+    tr {
+      display: table;
+      width: 100%;
+      table-layout: fixed;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: top;
+      word-break: break-word;
+    }
+
+    th {
+      background: #f0eadf;
+      color: var(--slate);
+      font-size: 13px;
+      text-transform: uppercase;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .pill-list li {
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      background: #fbf6ec;
+      border-radius: 999px;
+      color: #3d4a4e;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .resource-grid {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr 1fr;
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .resource {
+      min-height: 176px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      padding: 18px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .resource::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 6px;
+      background: var(--teal);
+    }
+
+    .resource.worker::before {
+      background: var(--green);
+    }
+
+    .resource.runner::before {
+      background: var(--blue);
+    }
+
+    .resource h3 {
+      margin: 4px 0 12px;
+      font-size: 20px;
+    }
+
+    .resource dl {
+      display: grid;
+      grid-template-columns: 80px minmax(0, 1fr);
+      gap: 6px 10px;
+      margin: 0;
+      font-size: 14px;
+    }
+
+    .resource dt {
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .resource dd {
+      margin: 0;
+      color: var(--ink);
+      font-weight: 800;
+    }
+
+    .footer {
+      padding: 40px 0 54px;
+      background: var(--slate);
+      color: #dce6e4;
+    }
+
+    .footer-inner {
+      width: min(100% - 32px, var(--content));
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 0.42fr);
+      gap: 24px;
+    }
+
+    .footer h2 {
+      margin: 0 0 12px;
+      font-size: 26px;
+    }
+
+    .footer p,
+    .footer li {
+      color: #b8c9c6;
+    }
+
+    .footer code {
+      background: rgba(255, 255, 255, 0.1);
+      color: #e7f2ef;
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .section-head,
+      .two-col,
+      .resource-grid,
+      .footer-inner {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        min-height: auto;
+        padding-top: 40px;
+      }
+
+      .hero-visual {
+        order: -1;
+      }
+
+      .hero-meta,
+      .three-col {
+        grid-template-columns: 1fr;
+      }
+
+      .nav-links {
+        display: none;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .hero h1 {
+        font-size: 42px;
+      }
+
+      .section,
+      .band > .section {
+        padding: 48px 0;
+      }
+
+      .panel,
+      .talk-track,
+      .callout {
+        padding: 16px;
+      }
+
+      .topbar-inner,
+      .section,
+      .hero,
+      .footer-inner {
+        width: min(100% - 22px, var(--content));
+      }
+    }
+
+    @media print {
+      body {
+        background: #fff;
+        color: #111;
+      }
+
+      .topbar {
+        position: static;
+      }
+
+      .section,
+      .band > .section,
+      .hero {
+        width: 100%;
+        padding: 28px 0;
+        page-break-inside: avoid;
+      }
+
+      .hero,
+      .two-col,
+      .section-head,
+      .resource-grid,
+      .footer-inner {
+        grid-template-columns: 1fr;
+      }
+
+      .panel,
+      .hero-visual,
+      .diagram-wrap,
+      .resource,
+      .metric {
+        box-shadow: none;
+      }
+
+      .footer {
+        background: #fff;
+        color: #111;
+      }
+
+      .footer p,
+      .footer li {
+        color: #333;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="topbar" aria-label="页面导航">
+    <div class="topbar-inner">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span>多机 CI 系统设计</div>
+      <div class="nav-links">
+        <a href="#why">为什么</a>
+        <a href="#architecture">架构</a>
+        <a href="#deployment">部署</a>
+        <a href="#kueue">排队</a>
+        <a href="#topology">拓扑</a>
+        <a href="#lifecycle">流程</a>
+        <a href="#workflow">Workflow</a>
+        <a href="#api">接口</a>
+        <a href="#limits">限制</a>
+        <a href="#onboarding">接入</a>
+        <a href="#troubleshooting">排障</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <span class="eyebrow">基于 rayjob-submitter + KubeRay + GitHub Actions</span>
+      <h1>多机 Ascend CI 的系统设计、原理与接入方法</h1>
+      <p class="lead">
+        从 GitHub Actions 发起，通过内部 HTTP submitter 创建 KubeRay RayJob，
+        最终在多机多卡 Ascend 集群上运行分布式训练。控制面、执行面、资源拓扑和 workflow 接入方式在同一套机制中闭环。
+      </p>
+      <div class="hero-meta" aria-label="关键事实">
+        <div class="metric">
+          <strong>N x M</strong>
+          <span>worker 数 x 每 worker NPU 数，nightly 当前实例为 2 x 16</span>
+        </div>
+        <div class="metric">
+          <strong>HTTP API</strong>
+          <span>GitHub Actions 不直接持有 Kubernetes 权限</span>
+        </div>
+        <div class="metric">
+          <strong>模板化</strong>
+          <span>RayJob YAML 固化安全约束，workflow 只做白名单调参</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-visual" aria-label="系统概要图">
+      <svg viewBox="0 0 760 560" role="img" aria-labelledby="heroTitle heroDesc">
+        <title id="heroTitle">多机 CI 概要</title>
+        <desc id="heroDesc">GitHub Actions 通过 submitter 创建 RayJob，KubeRay 创建 head 和多个 worker。</desc>
+        <defs>
+          <marker id="heroArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#263238"></path>
+          </marker>
+          <pattern id="smallGrid" width="28" height="28" patternUnits="userSpaceOnUse">
+            <path d="M 28 0 H 0 V 28" fill="none" stroke="#d8d0c0" stroke-width="1"></path>
+          </pattern>
+        </defs>
+        <rect width="760" height="560" fill="#fffdf8"></rect>
+        <rect width="760" height="560" fill="url(#smallGrid)" opacity="0.55"></rect>
+
+        <rect x="46" y="58" width="190" height="104" rx="8" fill="#e3eefc" stroke="#2457a6" stroke-width="2"></rect>
+        <text x="66" y="92" font-size="18" font-weight="800" fill="#172124">GitHub Actions</text>
+        <text x="66" y="122" font-size="13" fill="#3b4b5b">CI workflow</text>
+        <text x="66" y="145" font-size="13" fill="#3b4b5b">提交 + watch + cleanup</text>
+
+        <rect x="304" y="58" width="190" height="104" rx="8" fill="#dff3ef" stroke="#0f766e" stroke-width="2"></rect>
+        <text x="324" y="92" font-size="18" font-weight="800" fill="#172124">rayjob-submitter</text>
+        <text x="324" y="122" font-size="13" fill="#2e5752">校验请求</text>
+        <text x="324" y="145" font-size="13" fill="#2e5752">DeepCopy 模板并 patch</text>
+
+        <rect x="562" y="58" width="150" height="104" rx="8" fill="#f4ead6" stroke="#a46213" stroke-width="2"></rect>
+        <text x="582" y="92" font-size="18" font-weight="800" fill="#172124">KubeRay</text>
+        <text x="582" y="122" font-size="13" fill="#5a431f">创建 RayJob</text>
+        <text x="582" y="145" font-size="13" fill="#5a431f">管理 RayCluster</text>
+
+        <path d="M 236 110 H 304" fill="none" stroke="#263238" stroke-width="2.5" marker-end="url(#heroArrow)"></path>
+        <path d="M 494 110 H 562" fill="none" stroke="#263238" stroke-width="2.5" marker-end="url(#heroArrow)"></path>
+
+        <rect x="72" y="238" width="616" height="246" rx="14" fill="#eef7f1" stroke="#287a50" stroke-width="2"></rect>
+        <text x="98" y="276" font-size="22" font-weight="900" fill="#172124">RayCluster for one CI job</text>
+        <text x="98" y="305" font-size="14" fill="#42624e">Head 不承载训练负载，worker 承载 N x M 卡训练。</text>
+
+        <rect x="104" y="342" width="138" height="88" rx="8" fill="#fffdf8" stroke="#0f766e" stroke-width="2"></rect>
+        <text x="126" y="374" font-size="17" font-weight="800" fill="#172124">Head Pod</text>
+        <text x="126" y="402" font-size="13" fill="#5f6d71">num-cpus=0</text>
+
+        <rect x="306" y="342" width="138" height="88" rx="8" fill="#fffdf8" stroke="#287a50" stroke-width="2"></rect>
+        <text x="328" y="374" font-size="17" font-weight="800" fill="#172124">Worker 0</text>
+        <text x="328" y="402" font-size="13" fill="#5f6d71">M NPU / worker</text>
+
+        <rect x="506" y="342" width="138" height="88" rx="8" fill="#fffdf8" stroke="#287a50" stroke-width="2"></rect>
+        <text x="528" y="374" font-size="17" font-weight="800" fill="#172124">Worker 1..N</text>
+        <text x="528" y="402" font-size="13" fill="#5f6d71">M NPU / worker</text>
+
+        <circle cx="375" cy="226" r="34" fill="#162326"></circle>
+        <text x="375" y="233" text-anchor="middle" font-size="18" font-weight="900" fill="#e8f1ef">Ray</text>
+        <path d="M 637 162 C 637 196 600 212 442 226" fill="none" stroke="#263238" stroke-width="2.5" marker-end="url(#heroArrow)"></path>
+        <path d="M 375 260 V 342" fill="none" stroke="#263238" stroke-width="2.5" marker-end="url(#heroArrow)"></path>
+        <path d="M 344 246 C 250 270 196 300 173 342" fill="none" stroke="#263238" stroke-width="2.5" marker-end="url(#heroArrow)"></path>
+        <path d="M 406 246 C 486 270 548 300 575 342" fill="none" stroke="#263238" stroke-width="2.5" marker-end="url(#heroArrow)"></path>
+
+        <path d="M 304 148 C 226 192 196 196 150 238" fill="none" stroke="#2457a6" stroke-width="2" stroke-dasharray="7 7" marker-end="url(#heroArrow)"></path>
+        <text x="82" y="206" font-size="13" fill="#2457a6" font-weight="800">watch logs / final</text>
+      </svg>
+    </div>
+  </header>
+
+  <main>
+    <section id="why" class="section">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">01 / 背景</p>
+          <h2>为什么不让 workflow 直接创建 Kubernetes 资源</h2>
+        </div>
+        <p class="section-summary">
+          核心取舍是把 Kubernetes 权限、RayJob 模板和清理逻辑收敛到内部 submitter 服务，
+          workflow 只描述本次任务的提交、镜像、入口脚本和资源调参。
+        </p>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <h3>背景与目标</h3>
+          <div class="talk-track">
+            <strong>核心观点：</strong>
+            目标不是在 Kubernetes 上手工运行一个 RayJob，而是把多机多卡训练稳定接入 CI。
+            CI 触发频繁、失败需要可观测、训练资源成本高、清理必须可靠，GitHub Actions 本身也不持有集群写权限。
+            HTTP submitter 承担受控网关角色：workflow 提交任务描述，submitter 根据模板创建 RayJob、观察状态和日志，并在 workflow 结束时清理资源。
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>这套设计保护了什么</h3>
+          <ul>
+            <li>GitHub Actions 不直接持有 Kubernetes kubeconfig。</li>
+            <li>workflow 不能提交任意 RayJob YAML，只能走白名单字段和安全 patch。</li>
+            <li>RayJob、RayCluster、Pod 日志和清理都由服务端统一封装。</li>
+            <li>网页端强制终止 workflow 时，后台 stale cleanup 兜底删除残留任务。</li>
+          </ul>
+          <ul class="pill-list" aria-label="关键词">
+            <li>最小权限</li>
+            <li>模板驱动</li>
+            <li>状态可观测</li>
+            <li>资源兜底清理</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <div class="band">
+      <section id="architecture" class="section">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">02 / 系统架构</p>
+            <h2>控制面是 submitter，执行面是 KubeRay RayCluster</h2>
+          </div>
+          <p class="section-summary">
+            一次 CI 任务会穿过三层边界：GitHub runner、submitter 服务、KubeRay 管理的 RayJob/RayCluster。
+            一个 RayJob 主要创建 1 个 RayJob submitter Pod、1 个 head Pod 和 N 个 worker Pod；worker 数量由提交参数与服务端上限共同控制。
+          </p>
+        </div>
+
+        <div class="diagram-wrap">
+          <div class="diagram-title">
+            <div>架构图：从 GitHub workflow 到多机 RayCluster</div>
+            <span>rendered SVG</span>
+          </div>
+          <div class="diagram-body">
+            <svg viewBox="0 0 1280 650" role="img" aria-labelledby="archTitle archDesc">
+              <title id="archTitle">多机 CI 系统架构</title>
+              <desc id="archDesc">展示 GitHub Actions、共享缓存、rayjob-submitter、Kubernetes API、KubeRay、RayJob 和 RayCluster 的关系。</desc>
+              <defs>
+                <marker id="archArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#263238"></path>
+                </marker>
+                <style>
+                  .arch-label { font: 800 17px ui-sans-serif, system-ui, sans-serif; fill: #172124; }
+                  .arch-small { font: 13px ui-sans-serif, system-ui, sans-serif; fill: #526368; }
+                  .arch-tiny { font: 12px ui-sans-serif, system-ui, sans-serif; fill: #526368; }
+                  .arch-zone { fill: rgba(255, 253, 248, 0.72); stroke: #d8d0c0; stroke-width: 2; }
+                  .arch-flow { stroke: #263238; stroke-width: 2.4; fill: none; marker-end: url(#archArrow); }
+                  .arch-flow-soft { stroke: #2457a6; stroke-width: 2; fill: none; stroke-dasharray: 8 7; marker-end: url(#archArrow); }
+                </style>
+              </defs>
+
+              <rect width="1280" height="650" fill="#fffdf8"></rect>
+              <rect x="28" y="42" width="244" height="560" rx="12" class="arch-zone"></rect>
+              <rect x="298" y="42" width="244" height="560" rx="12" class="arch-zone"></rect>
+              <rect x="568" y="42" width="244" height="560" rx="12" class="arch-zone"></rect>
+              <rect x="838" y="42" width="394" height="560" rx="12" class="arch-zone"></rect>
+
+              <text x="52" y="78" class="arch-label">GitHub / CI 触发层</text>
+              <text x="322" y="78" class="arch-label">CI Runner 执行层</text>
+              <text x="592" y="78" class="arch-label">提交网关层</text>
+              <text x="862" y="78" class="arch-label">Ray 训练编排层</text>
+
+              <rect x="62" y="118" width="176" height="84" rx="8" fill="#e3eefc" stroke="#2457a6" stroke-width="2"></rect>
+              <text x="84" y="150" class="arch-label">verl repository</text>
+              <text x="84" y="178" class="arch-small">push / schedule</text>
+
+              <rect x="62" y="252" width="176" height="108" rx="8" fill="#e3eefc" stroke="#2457a6" stroke-width="2"></rect>
+              <text x="84" y="284" class="arch-label">CI workflow</text>
+              <text x="84" y="312" class="arch-small">POST RayJob</text>
+              <text x="84" y="336" class="arch-small">watch NDJSON</text>
+
+              <rect x="332" y="118" width="176" height="108" rx="8" fill="#f4ead6" stroke="#a46213" stroke-width="2"></rect>
+              <text x="354" y="150" class="arch-label">Runner container</text>
+              <text x="354" y="178" class="arch-small">linux-aarch64-a3-8</text>
+              <text x="354" y="202" class="arch-small">curl + jq helper</text>
+
+              <rect x="332" y="284" width="176" height="108" rx="8" fill="#fff7e8" stroke="#a46213" stroke-width="2"></rect>
+              <text x="354" y="316" class="arch-label">shared cache</text>
+              <text x="354" y="344" class="arch-small">/root/.cache/cicd_test</text>
+              <text x="354" y="366" class="arch-small">code / datasets</text>
+              <text x="354" y="386" class="arch-small">model weights</text>
+
+              <rect x="602" y="118" width="176" height="108" rx="8" fill="#dff3ef" stroke="#0f766e" stroke-width="2"></rect>
+              <text x="624" y="150" class="arch-label">rayjob-submitter</text>
+              <text x="624" y="178" class="arch-small">namespace: ci-system</text>
+              <text x="624" y="202" class="arch-small">validate + render</text>
+
+              <rect x="602" y="284" width="176" height="116" rx="8" fill="#dff3ef" stroke="#0f766e" stroke-width="2"></rect>
+              <text x="624" y="316" class="arch-label">RayJob template</text>
+              <text x="624" y="344" class="arch-small">verl-rayjob.yaml</text>
+              <text x="624" y="368" class="arch-small">safe template_patches</text>
+
+              <rect x="872" y="104" width="146" height="92" rx="8" fill="#f4ead6" stroke="#a46213" stroke-width="2"></rect>
+              <text x="894" y="136" class="arch-label">K8s API</text>
+              <text x="894" y="164" class="arch-small">client-go</text>
+
+              <rect x="1048" y="104" width="146" height="92" rx="8" fill="#f4ead6" stroke="#a46213" stroke-width="2"></rect>
+              <text x="1070" y="136" class="arch-label">KubeRay</text>
+              <text x="1070" y="164" class="arch-small">operator</text>
+
+              <rect x="872" y="248" width="322" height="292" rx="12" fill="#e0f0e7" stroke="#287a50" stroke-width="2"></rect>
+              <text x="900" y="284" class="arch-label">RayJob / RayCluster</text>
+              <text x="900" y="312" class="arch-small">single CI run: vrj-&lt;run_id&gt;-&lt;attempt&gt;-...</text>
+
+              <rect x="902" y="348" width="118" height="70" rx="8" fill="#fffdf8" stroke="#0f766e" stroke-width="2"></rect>
+              <text x="924" y="376" class="arch-label">Job Pod</text>
+              <text x="924" y="400" class="arch-tiny">runs wrapper</text>
+
+              <rect x="1046" y="348" width="118" height="70" rx="8" fill="#fffdf8" stroke="#0f766e" stroke-width="2"></rect>
+              <text x="1068" y="376" class="arch-label">Head</text>
+              <text x="1068" y="400" class="arch-tiny">num-cpus=0</text>
+
+              <rect x="902" y="446" width="118" height="70" rx="8" fill="#fffdf8" stroke="#287a50" stroke-width="2"></rect>
+              <text x="924" y="474" class="arch-label">Worker 0</text>
+              <text x="924" y="498" class="arch-tiny">M NPU</text>
+
+              <rect x="1046" y="446" width="118" height="70" rx="8" fill="#fffdf8" stroke="#287a50" stroke-width="2"></rect>
+              <text x="1054" y="474" class="arch-label">Worker 1..N</text>
+              <text x="1068" y="498" class="arch-tiny">M NPU</text>
+
+              <path d="M150 202 V252" class="arch-flow"></path>
+              <path d="M238 306 H270 V172 H332" class="arch-flow"></path>
+              <path d="M420 226 V284" class="arch-flow"></path>
+              <path d="M508 172 H602" class="arch-flow"></path>
+              <path d="M690 226 V284" class="arch-flow"></path>
+              <path d="M778 172 H872" class="arch-flow"></path>
+              <path d="M1018 150 H1048" class="arch-flow"></path>
+              <path d="M1121 196 V248" class="arch-flow"></path>
+              <path d="M1033 312 V348" class="arch-flow"></path>
+              <path d="M980 418 V446" class="arch-flow"></path>
+              <path d="M1088 418 V446" class="arch-flow"></path>
+
+              <path d="M872 384 C730 490 548 456 508 368" class="arch-flow-soft"></path>
+              <text x="596" y="480" class="arch-small" fill="#2457a6">Job Pod 读取共享缓存中的源码、数据集</text>
+              <text x="596" y="502" class="arch-small" fill="#2457a6">和模型权重</text>
+
+              <path d="M602 205 C510 254 402 250 238 336" class="arch-flow-soft"></path>
+              <text x="274" y="252" class="arch-small" fill="#2457a6">状态和日志回流到 workflow</text>
+
+              <path d="M238 356 C382 570 680 594 1032 540" class="arch-flow-soft"></path>
+              <text x="434" y="590" class="arch-small" fill="#2457a6">DELETE /workflows/{run_id}?attempt=N 清理本次 RayJob</text>
+            </svg>
+          </div>
+          <div class="legend">
+            <span class="legend-item"><span class="dot blue"></span>GitHub / workflow</span>
+            <span class="legend-item"><span class="dot amber"></span>runner 和共享缓存</span>
+            <span class="legend-item"><span class="dot teal"></span>submitter 控制面</span>
+            <span class="legend-item"><span class="dot green"></span>Ray 执行面</span>
+          </div>
+        </div>
+
+        <div class="resource-grid" style="margin-top: 22px;">
+          <div class="resource runner">
+            <h3>Runner</h3>
+            <dl>
+              <dt>来源</dt><dd>GitHub Actions job</dd>
+              <dt>职责</dt><dd>checkout、生成 payload、curl submitter</dd>
+              <dt>缓存</dt><dd>/root/.cache/cicd_test</dd>
+            </dl>
+          </div>
+          <div class="resource">
+            <h3>RayJob submitter Pod</h3>
+            <dl>
+              <dt>来源</dt><dd>KubeRay RayJob</dd>
+              <dt>职责</dt><dd>执行 entrypoint wrapper</dd>
+              <dt>位置</dt><dd>不是长期服务容器</dd>
+            </dl>
+          </div>
+          <div class="resource worker">
+            <h3>RayCluster</h3>
+            <dl>
+              <dt>Head</dt><dd>1 pod，num-cpus=0</dd>
+              <dt>Worker</dt><dd>N pods，每个 M NPU</dd>
+              <dt>DP</dt><dd>全量使用时 data parallel size = N x M</dd>
+            </dl>
+          </div>
+        </div>
+
+        <div class="callout" style="margin-top: 22px;">
+          <strong>执行位置：</strong>
+          `run_multinode_testing.sh` 是在 RayJob 的 submitter Pod 里启动的，不是在长期运行的 `rayjob-submitter` 服务里，也不是直接在 head 里启动。
+          它再通过 `ray.init(address="auto")` 和 Ray remote task 把源码同步、安装、数据准备分发到所有 worker。
+        </div>
+      </section>
+    </div>
+
+    <section id="deployment" class="section">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">03 / 部署形态</p>
+          <h2>控制面服务、队列资源和 RayJob 模板分层部署</h2>
+        </div>
+        <p class="section-summary">
+          部署面分为四层：KubeRay/Kueue 控制器、Kueue 队列资源、rayjob-submitter 服务、RayJob 模板。
+          GitHub Actions 只访问集群内的 submitter Service，不直接持有 Kubernetes 写权限。
+        </p>
+      </div>
+
+      <div class="panel">
+        <h3>部署产物</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>产物</th>
+              <th>位置</th>
+              <th>职责</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>submitter 镜像</td>
+              <td><code>Dockerfile</code></td>
+              <td>构建 Go 静态二进制，并把默认 <code>templates/verl-rayjob.yaml</code> 打进镜像。</td>
+            </tr>
+            <tr>
+              <td>RBAC</td>
+              <td><code>deploy/rbac.yaml</code></td>
+              <td>创建 <code>ci-system</code> 命名空间、ServiceAccount，并在 <code>ray</code> 命名空间授予 RayJob 创建/查询/删除和 Pod 日志读取权限。</td>
+            </tr>
+            <tr>
+              <td>HTTP 服务</td>
+              <td><code>deploy/deployment.yaml</code></td>
+              <td>部署 <code>rayjob-submitter</code> Deployment 和 ClusterIP Service，暴露 <code>/healthz</code> 与 <code>/api/v1/*</code>。</td>
+            </tr>
+            <tr>
+              <td>RayJob 模板</td>
+              <td><code>templates/verl-rayjob*.yaml</code></td>
+              <td>固化 RayCluster 结构、hostPath、NPU 驱动挂载、nodeSelector、基础 env、workerGroup；启用 Kueue 时同时携带队列标签和 <code>spec.suspend</code>。</td>
+            </tr>
+            <tr>
+              <td>Kueue 队列</td>
+              <td><code>kueue/kueue-ray-npu-a2.yaml</code></td>
+              <td>定义 ResourceFlavor、ClusterQueue、LocalQueue 和 workload priority，把多机 RayJob 纳入资源准入。</td>
+            </tr>
+            <tr>
+              <td>业务流水线</td>
+              <td><a href="https://github.com/verl-project/verl/blob/main/.github/workflows/nightly_ascend_multinode.yml">nightly_ascend_multinode.yml</a></td>
+              <td>准备源码缓存、构造提交 payload、调用 submitter、消费 watch 事件并执行 cleanup。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="code-block" style="margin-top: 22px;">
+        <div class="code-title">
+          <span>集群内部署顺序</span>
+          <span>KubeRay / Kueue operator 先于业务资源</span>
+        </div>
+        <pre><code># 1. 先部署 KubeRay 和 Kueue operator / CRD。
+# 2. ray 命名空间进入 Kueue 资源池选择范围。
+kubectl label namespace ray kueue-pool=ray-npu --overwrite
+
+# 3. 部署 Kueue 队列和资源配额。
+kubectl apply -f kueue/kueue-ray-npu-a2.yaml
+
+# 4. 部署 submitter RBAC、Deployment 和 Service。
+kubectl apply -f deploy/rbac.yaml
+kubectl apply -f deploy/deployment.yaml
+
+# 5. 验证服务可用。
+kubectl -n ci-system rollout status deploy/rayjob-submitter
+kubectl -n ci-system get svc rayjob-submitter</code></pre>
+      </div>
+
+      <div class="panel" style="margin-top: 22px;">
+        <h3>关键运行配置</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>配置</th>
+              <th>作用</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>TARGET_NAMESPACE=ray</code></td>
+              <td>RayJob 创建到 <code>ray</code> 命名空间。</td>
+            </tr>
+            <tr>
+              <td><code>RAYJOB_TEMPLATE_PATH</code></td>
+              <td>submitter 启动时加载的 RayJob 模板路径。</td>
+            </tr>
+            <tr>
+              <td><code>WORKER_REPLICAS</code> / <code>MAX_WORKER_REPLICAS</code></td>
+              <td>默认 worker 数和单次提交允许的最大 worker 数。</td>
+            </tr>
+            <tr>
+              <td><code>ALLOWED_IMAGE_PREFIXES</code></td>
+              <td>限制 workflow 可提交的镜像来源。</td>
+            </tr>
+            <tr>
+              <td><code>ALLOWED_SCRIPT_PREFIXES</code></td>
+              <td>限制入口脚本只能来自受控目录，例如共享缓存和 <code>/verl</code>。</td>
+            </tr>
+            <tr>
+              <td><code>MAX_ARGS</code> / <code>MAX_EXTRA_ENV</code> / <code>MAX_TEMPLATE_PATCHES</code></td>
+              <td>控制 workflow 单次提交的参数数量、环境变量数量和 template patch 数量。</td>
+            </tr>
+            <tr>
+              <td><code>STALE_RAYJOB_* </code></td>
+              <td>后台清理残留 RayJob，覆盖网页端强制终止 workflow 未执行 DELETE 的场景。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout" style="margin-top: 22px;">
+        Kueue 生效依赖 submitter 实际加载的 RayJob 模板。仅部署 <code>ClusterQueue</code> / <code>LocalQueue</code> 不会自动拦截 RayJob；
+        <code>RAYJOB_TEMPLATE_PATH</code> 指向的模板必须包含 <code>kueue.x-k8s.io/queue-name</code>、优先级标签和 <code>spec.suspend: true</code>。
+        仓库中的 <code>templates/verl-rayjob-a2.yaml</code> 展示了队列字段形态，硬件专用模板需要与目标 Kueue 资源和 NPU resource key 对齐。
+      </div>
+    </section>
+
+    <div class="band">
+      <section id="kueue" class="section">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">04 / Kueue 资源准入</p>
+            <h2>多机任务必须先排队，再整体进入调度</h2>
+          </div>
+          <p class="section-summary">
+            多机 RayJob 需要成组资源。没有队列准入时，多个任务同时创建 RayCluster，容易各自抢到一部分机器，
+            剩余资源又不足以让任何一个任务补齐完整拓扑，最终形成资源碎片和互相等待。
+          </p>
+        </div>
+
+        <div class="diagram-wrap">
+          <div class="diagram-title">
+            <div>Kueue 准入：从资源碎片到整体放行</div>
+            <span>rendered SVG</span>
+          </div>
+          <div class="diagram-body">
+            <svg viewBox="0 0 1280 430" role="img" aria-labelledby="kueueTitle kueueDesc">
+              <title id="kueueTitle">Kueue 解决多机 RayJob 资源死等</title>
+              <desc id="kueueDesc">左侧展示无队列时多个任务各占一部分机器，右侧展示 Kueue 只在完整资源满足时放行一个任务。</desc>
+              <defs>
+                <marker id="kueueArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#263238"></path>
+                </marker>
+                <style>
+                  .k-title { font: 900 20px ui-sans-serif, system-ui, sans-serif; fill: #172124; }
+                  .k-label { font: 800 15px ui-sans-serif, system-ui, sans-serif; fill: #172124; }
+                  .k-small { font: 13px ui-sans-serif, system-ui, sans-serif; fill: #526368; }
+                  .k-flow { stroke: #263238; stroke-width: 2.2; fill: none; marker-end: url(#kueueArrow); }
+                </style>
+              </defs>
+              <rect width="1280" height="430" fill="#fffdf8"></rect>
+
+              <rect x="42" y="42" width="552" height="330" rx="12" fill="#f6e3db" stroke="#b54727" stroke-width="2"></rect>
+              <text x="72" y="82" class="k-title">无队列准入</text>
+              <text x="72" y="112" class="k-small">多个 RayJob 同时进入 Pod 调度，资源被拆散占用。</text>
+
+              <rect x="82" y="156" width="130" height="72" rx="8" fill="#fffdf8" stroke="#b54727" stroke-width="2"></rect>
+              <text x="108" y="187" class="k-label">Job A</text>
+              <text x="108" y="211" class="k-small">需要 2 worker</text>
+              <rect x="252" y="146" width="104" height="52" rx="8" fill="#fffdf8" stroke="#287a50" stroke-width="2"></rect>
+              <text x="278" y="178" class="k-label">Node 1</text>
+              <rect x="252" y="216" width="104" height="52" rx="8" fill="#fffdf8" stroke="#b54727" stroke-width="2" stroke-dasharray="7 5"></rect>
+              <text x="276" y="248" class="k-small">等待</text>
+
+              <rect x="82" y="278" width="130" height="72" rx="8" fill="#fffdf8" stroke="#b54727" stroke-width="2"></rect>
+              <text x="108" y="309" class="k-label">Job B</text>
+              <text x="108" y="333" class="k-small">需要 2 worker</text>
+              <rect x="396" y="146" width="104" height="52" rx="8" fill="#fffdf8" stroke="#287a50" stroke-width="2"></rect>
+              <text x="422" y="178" class="k-label">Node 2</text>
+              <rect x="396" y="216" width="104" height="52" rx="8" fill="#fffdf8" stroke="#b54727" stroke-width="2" stroke-dasharray="7 5"></rect>
+              <text x="420" y="248" class="k-small">等待</text>
+              <path d="M212 192 H252" class="k-flow"></path>
+              <path d="M212 314 C270 312 340 246 396 242" class="k-flow"></path>
+              <text x="245" y="332" class="k-small">每个任务只拿到一部分资源，完整拓扑无法启动。</text>
+
+              <rect x="686" y="42" width="552" height="330" rx="12" fill="#e0f0e7" stroke="#287a50" stroke-width="2"></rect>
+              <text x="716" y="82" class="k-title">Kueue 整体准入</text>
+              <text x="716" y="112" class="k-small">RayJob 先 suspend，Kueue 只在完整资源可用时放行。</text>
+
+              <rect x="726" y="154" width="140" height="76" rx="8" fill="#fffdf8" stroke="#0f766e" stroke-width="2"></rect>
+              <text x="752" y="185" class="k-label">LocalQueue</text>
+              <text x="752" y="209" class="k-small">default / ray</text>
+
+              <rect x="918" y="154" width="150" height="76" rx="8" fill="#fffdf8" stroke="#0f766e" stroke-width="2"></rect>
+              <text x="942" y="185" class="k-label">ClusterQueue</text>
+              <text x="942" y="209" class="k-small">quota + flavor</text>
+
+              <rect x="1110" y="122" width="92" height="48" rx="8" fill="#fffdf8" stroke="#287a50" stroke-width="2"></rect>
+              <text x="1132" y="153" class="k-small">Node 1</text>
+              <rect x="1110" y="190" width="92" height="48" rx="8" fill="#fffdf8" stroke="#287a50" stroke-width="2"></rect>
+              <text x="1132" y="221" class="k-small">Node 2</text>
+              <rect x="1110" y="258" width="92" height="48" rx="8" fill="#fffdf8" stroke="#a46213" stroke-width="2" stroke-dasharray="7 5"></rect>
+              <text x="1125" y="289" class="k-small">queued</text>
+
+              <path d="M866 192 H918" class="k-flow"></path>
+              <path d="M1068 192 C1090 180 1098 154 1110 146" class="k-flow"></path>
+              <path d="M1068 198 C1090 206 1098 214 1110 214" class="k-flow"></path>
+              <text x="728" y="326" class="k-small">Job A 获得完整 N x M 资源后启动。</text>
+              <text x="728" y="350" class="k-small">Job B 留在 LocalQueue 中等待下一轮准入。</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="two-col" style="margin-top: 22px;">
+          <div class="panel">
+            <h3>RayJob 接入 Kueue 的条件</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>配置点</th>
+                  <th>作用</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>kueue.x-k8s.io/queue-name</code></td>
+                  <td>RayJob 进入指定 LocalQueue，例如 <code>default</code>。</td>
+                </tr>
+                <tr>
+                  <td><code>kueue.x-k8s.io/priority-class</code></td>
+                  <td>控制 workload 优先级，例如多机任务使用 <code>ray-high</code>。</td>
+                </tr>
+                <tr>
+                  <td><code>spec.suspend: true</code></td>
+                  <td>RayJob 创建后先暂停，等待 Kueue 准入后再由控制器放行。</td>
+                </tr>
+                <tr>
+                  <td><code>LocalQueue</code> / <code>ClusterQueue</code></td>
+                  <td>把 <code>ray</code> 命名空间中的任务映射到统一资源池。</td>
+                </tr>
+                <tr>
+                  <td><code>ResourceFlavor</code></td>
+                  <td>按节点标签和资源名区分硬件池，例如 A2、A3、不同 NPU resource key。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div>
+            <div class="code-block">
+              <div class="code-title">
+                <span>RayJob 模板中的 Kueue 字段</span>
+                <span>队列标签由模板提供</span>
+              </div>
+              <pre><code>metadata:
+  labels:
+    kueue.x-k8s.io/queue-name: default
+    kueue.x-k8s.io/priority-class: ray-high
+spec:
+  suspend: true</code></pre>
+            </div>
+            <div class="callout">
+              submitter 渲染 RayJob 时会保留模板已有 labels，并追加 CI 标签；安全 <code>template_patches</code> 不开放 metadata patch。
+              因此队列归属属于服务端模板和部署配置，不由 workflow 临时改写。
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top: 22px;">
+          <h3>Kueue 资源对象</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>对象</th>
+                <th>示例</th>
+                <th>作用</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>WorkloadPriorityClass</code></td>
+                <td><code>ray-high</code></td>
+                <td>多机 RayJob 使用更高优先级，支持队列内按优先级准入和抢占策略。</td>
+              </tr>
+              <tr>
+                <td><code>ResourceFlavor</code></td>
+                <td><code>a2-normal</code> / <code>a2-dual</code></td>
+                <td>用节点标签绑定不同硬件池，并声明对应 CPU、memory、NPU quota。</td>
+              </tr>
+              <tr>
+                <td><code>ClusterQueue</code></td>
+                <td><code>ray-npu-cq</code></td>
+                <td>集中管理 NPU 资源配额，使用 <code>BestEffortFIFO</code> 队列策略和优先级抢占。</td>
+              </tr>
+              <tr>
+                <td><code>LocalQueue</code></td>
+                <td><code>default</code> / <code>ray</code></td>
+                <td>RayJob 所在命名空间的入口队列，指向全局 ClusterQueue。</td>
+              </tr>
+              <tr>
+                <td><code>Namespace label</code></td>
+                <td><code>kueue-pool=ray-npu</code></td>
+                <td>匹配 ClusterQueue 的 <code>namespaceSelector</code>，把目标命名空间纳入资源池。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <section id="topology" class="section">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">05 / 拓扑模型</p>
+          <h2>多机规模由 worker 数和单机资源共同决定</h2>
+        </div>
+        <p class="section-summary">
+          多机 CI 的核心规模参数不是固定节点数，而是 `worker_replicas x 每 worker NPU 数`。
+          当前 nightly 示例使用 2 个 worker、每个 worker 16 张 Ascend NPU，形成 32 卡验证拓扑。
+        </p>
+      </div>
+
+      <div class="three-col">
+        <div class="panel">
+          <h3>worker_replicas</h3>
+          <p>`worker_replicas` 控制 Ray worker Pod 数量。submitter 会把该值 patch 到 RayCluster worker group 的 `replicas/minReplicas/maxReplicas`。</p>
+          <p>服务端通过 `MAX_WORKER_REPLICAS` 控制当前环境允许的最大 worker 数，避免单条 CI 超出资源预算。</p>
+        </div>
+        <div class="panel">
+          <h3>每 worker 资源</h3>
+          <p>CPU、memory、NPU 数和 `/dev/shm` 通过 `template_patches` 调整。资源 patch 只作用于白名单路径，不能改 hostPath、权限、镜像和调度约束。</p>
+          <p>当前 nightly 示例把每个 worker 调整到 `64 CPU / 512Gi / 16 NPU / 128Gi dshm`。</p>
+        </div>
+        <div class="panel">
+          <h3>训练并行规模</h3>
+          <p>当训练使用所有 worker NPU 时，data parallel size 通常等于 `worker_replicas x 每 worker NPU 数`。</p>
+          <p>2 x 16 的 nightly 拓扑对应 DP size 32，mini batch、global batch 和并行策略都需要与该规模匹配。</p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top: 22px;">
+        <h3>规模化参数对照</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>维度</th>
+              <th>配置入口</th>
+              <th>当前 nightly 实例</th>
+              <th>影响范围</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>worker 数量</td>
+              <td><code>WORKER_REPLICAS</code> / request <code>worker_replicas</code></td>
+              <td><code>2</code></td>
+              <td>Ray worker Pod 数、训练节点数、跨节点通信规模。</td>
+            </tr>
+            <tr>
+              <td>单 worker NPU</td>
+              <td><code>template_patches</code> 中的 <code>huawei.com~1ascend-1980</code></td>
+              <td><code>16</code></td>
+              <td>每个 worker 的卡数、单节点算力和 DP/TP/PP 编排空间。</td>
+            </tr>
+            <tr>
+              <td>单 worker memory</td>
+              <td><code>resources.requests/limits/memory</code></td>
+              <td><code>512Gi</code></td>
+              <td>模型加载、训练 batch、Ray object store 和容器 OOM 风险。</td>
+            </tr>
+            <tr>
+              <td>共享内存</td>
+              <td><code>volumes/1/emptyDir/sizeLimit</code></td>
+              <td><code>128Gi</code></td>
+              <td>数据加载、进程间通信、Ray/训练框架临时内存。</td>
+            </tr>
+            <tr>
+              <td>服务端上限</td>
+              <td><code>MAX_WORKER_REPLICAS</code></td>
+              <td>由部署配置控制</td>
+              <td>限制单次 CI 最大节点数，保护集群资源。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="three-col" style="margin-top: 22px;">
+        <div class="panel">
+          <h3>快速冒烟层</h3>
+          <p>目标是尽快验证镜像、网络、submitter API、RayJob 创建、watch 事件和 cleanup 链路。</p>
+          <p>资源规模可以较小，重点覆盖控制面和基础执行路径。</p>
+        </div>
+        <div class="panel">
+          <h3>多机 nightly 层</h3>
+          <p>目标是验证跨节点 Ray 调度、Ascend 多卡资源申请、源码分发、训练脚本启动和关键 E2E 用例。</p>
+          <p>当前 nightly 采用 2 x 16 拓扑，承担稳定性和回归验证职责。</p>
+        </div>
+        <div class="panel">
+          <h3>扩展验证层</h3>
+          <p>目标是验证更大 N x M 拓扑下的通信、batch 配置、内存水位和训练框架并行策略。</p>
+          <p>扩展前需要同步调整服务端上限、模板资源、watch timeout 和集群容量规划。</p>
+        </div>
+      </div>
+
+      <div class="callout" style="margin-top: 22px;">
+        2 x 16 是当前 nightly 多机 CI 的落地实例，不是系统模型的边界。
+        扩展到更多 worker 时，需要同步评估集群容量、`MAX_WORKER_REPLICAS`、模板资源、训练并行策略、batch 配置和 watch timeout。
+      </div>
+    </section>
+
+    <section id="lifecycle" class="section">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">06 / 生命周期</p>
+          <h2>一次 CI 从触发到清理，分成九个动作</h2>
+        </div>
+        <p class="section-summary">
+          一次 CI 的生命周期包含源码准备、RayJob 提交、模板渲染、RayCluster 创建、wrapper 执行、watch 等待和最终清理。
+        </p>
+      </div>
+
+      <div class="diagram-wrap">
+        <div class="diagram-title">
+          <div>时序图：submit、watch、cleanup</div>
+          <span>rendered SVG</span>
+        </div>
+        <div class="diagram-body">
+          <svg viewBox="0 0 1280 560" role="img" aria-labelledby="seqTitle seqDesc">
+            <title id="seqTitle">RayJob CI 生命周期</title>
+            <desc id="seqDesc">展示 workflow、runner、submitter、Kubernetes API、KubeRay 和 RayCluster 之间的调用顺序。</desc>
+            <defs>
+              <marker id="seqArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#263238"></path>
+              </marker>
+              <style>
+                .seq-head { font: 900 15px ui-sans-serif, system-ui, sans-serif; fill: #172124; }
+                .seq-text { font: 13px ui-sans-serif, system-ui, sans-serif; fill: #344246; }
+                .seq-line { stroke: #a99f8e; stroke-width: 2; stroke-dasharray: 6 7; }
+                .seq-arrow { stroke: #263238; stroke-width: 2.2; fill: none; marker-end: url(#seqArrow); }
+                .seq-return { stroke: #2457a6; stroke-width: 2.1; fill: none; stroke-dasharray: 7 6; marker-end: url(#seqArrow); }
+              </style>
+            </defs>
+            <rect width="1280" height="560" fill="#fffdf8"></rect>
+            <g>
+              <rect x="42" y="42" width="168" height="46" rx="8" fill="#e3eefc" stroke="#2457a6" stroke-width="2"></rect>
+              <text x="72" y="72" class="seq-head">Workflow</text>
+              <line x1="126" y1="88" x2="126" y2="510" class="seq-line"></line>
+
+              <rect x="248" y="42" width="168" height="46" rx="8" fill="#f4ead6" stroke="#a46213" stroke-width="2"></rect>
+              <text x="294" y="72" class="seq-head">Runner</text>
+              <line x1="332" y1="88" x2="332" y2="510" class="seq-line"></line>
+
+              <rect x="454" y="42" width="168" height="46" rx="8" fill="#dff3ef" stroke="#0f766e" stroke-width="2"></rect>
+              <text x="484" y="72" class="seq-head">Submitter</text>
+              <line x1="538" y1="88" x2="538" y2="510" class="seq-line"></line>
+
+              <rect x="660" y="42" width="168" height="46" rx="8" fill="#f4ead6" stroke="#a46213" stroke-width="2"></rect>
+              <text x="706" y="72" class="seq-head">K8s API</text>
+              <line x1="744" y1="88" x2="744" y2="510" class="seq-line"></line>
+
+              <rect x="866" y="42" width="168" height="46" rx="8" fill="#f4ead6" stroke="#a46213" stroke-width="2"></rect>
+              <text x="906" y="72" class="seq-head">KubeRay</text>
+              <line x1="950" y1="88" x2="950" y2="510" class="seq-line"></line>
+
+              <rect x="1072" y="42" width="168" height="46" rx="8" fill="#e0f0e7" stroke="#287a50" stroke-width="2"></rect>
+              <text x="1102" y="72" class="seq-head">RayCluster</text>
+              <line x1="1156" y1="88" x2="1156" y2="510" class="seq-line"></line>
+            </g>
+
+            <path d="M126 124 H332" class="seq-arrow"></path>
+            <text x="150" y="116" class="seq-text">1. checkout 并复制到共享缓存</text>
+
+            <path d="M332 170 H538" class="seq-arrow"></path>
+            <text x="354" y="162" class="seq-text">2. POST /api/v1/rayjobs</text>
+
+            <path d="M538 216 H744" class="seq-arrow"></path>
+            <text x="560" y="208" class="seq-text">3. DeepCopy 模板 + 安全 patch 后 create RayJob</text>
+
+            <path d="M744 262 H950" class="seq-arrow"></path>
+            <text x="766" y="254" class="seq-text">4. KubeRay 观察到 RayJob CR</text>
+
+            <path d="M950 308 H1156" class="seq-arrow"></path>
+            <text x="972" y="300" class="seq-text">5. 创建 head、workers、job pod</text>
+
+            <path d="M1156 354 C1220 354 1220 392 1156 392" class="seq-return"></path>
+            <text x="860" y="382" class="seq-text">6. job pod 运行 wrapper，worker 准备 /verl 并启动训练</text>
+
+            <path d="M332 416 H538" class="seq-arrow"></path>
+            <text x="354" y="408" class="seq-text">7. GET /watch?format=ndjson</text>
+
+            <path d="M538 448 H332" class="seq-return"></path>
+            <text x="362" y="474" class="seq-text">8. status/log/final 回流</text>
+
+            <path d="M126 508 H538" class="seq-arrow"></path>
+            <text x="150" y="500" class="seq-text">9. always cleanup: DELETE /workflows/{run_id}?attempt=N</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="three-col" style="margin-top: 22px;">
+        <div class="panel compact">
+          <h3>主动清理</h3>
+          <p>workflow 的最后一步调用 `DELETE /api/v1/workflows/{GITHUB_RUN_ID}?attempt=N`，删除本次 attempt 创建的 RayJob。</p>
+        </div>
+        <div class="panel compact">
+          <h3>兜底清理</h3>
+          <p>服务默认每 600 秒扫描一次，删除带 `ci.verl/job-id` 标签且创建超过 21600 秒的 RayJob。</p>
+        </div>
+        <div class="panel compact">
+          <h3>最终判定</h3>
+          <p>`/watch` 的 `error` 事件不等于失败，workflow 最终只看 `final` 事件里的 `SUCCEEDED`、`FAILED`、`TIMEOUT` 或 `NOT_FOUND`。</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="band">
+      <section id="workflow" class="section">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">07 / 实践样例</p>
+            <h2>以 nightly_ascend_multinode.yml 为例接入 CI</h2>
+          </div>
+          <p class="section-summary">
+            示例对应 verl 项目主分支中的
+            <a href="https://github.com/verl-project/verl/blob/main/.github/workflows/nightly_ascend_multinode.yml">nightly_ascend_multinode.yml</a>。
+            这条流水线每天定时运行一次，当前提交 2 worker x 16 NPU 的多机 RayJob。
+          </p>
+        </div>
+
+        <div class="two-col">
+          <div>
+            <div class="code-block">
+              <div class="code-title">
+                <span>workflow 全局配置</span>
+                <span>定时触发 + 镜像 + worker 数</span>
+              </div>
+              <pre><code>name: nightly_ci_ascend_multinode
+
+on:
+  schedule:
+    - cron: "0 17 * * *"
+
+env:
+  SUBMITTER_URL: http://rayjob-submitter.ci-system.svc.cluster.local
+  IMAGE: swr.cn-southwest-2.myhuaweicloud.com/modelfoundry/ascend-ci/verl/verl:verl-9.0.0-a3-ubuntu22.04-py3.11-latest
+  WORKER_REPLICAS: "2"</code></pre>
+            </div>
+
+            <div class="code-block">
+              <div class="code-title">
+                <span>提交多机 RayJob 的核心调用</span>
+                <span>script + args + template_patches</span>
+              </div>
+              <pre><code>/root/.cache/cicd_test/submit_and_wait_rayjob.sh \
+  multinode-e2e \
+  /root/.cache/cicd_test/run_multinode_testing.sh \
+  '["--script-path","/verl/tests/special_npu/run_gspo_qwen3_30b_megatron_npu_multinode.sh"]' \
+  '{}' \
+  '[
+    {"op":"replace","path":"/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/requests/cpu","value":"64"},
+    {"op":"replace","path":"/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/requests/memory","value":"512Gi"},
+    {"op":"replace","path":"/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/requests/huawei.com~1ascend-1980","value":"16"},
+    {"op":"replace","path":"/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/limits/cpu","value":"64"},
+    {"op":"replace","path":"/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/limits/memory","value":"512Gi"},
+    {"op":"replace","path":"/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/limits/huawei.com~1ascend-1980","value":"16"},
+    {"op":"replace","path":"/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/volumes/1/emptyDir/sizeLimit","value":"128Gi"}
+  ]'</code></pre>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>workflow 的四个关键动作</h3>
+            <ol>
+              <li><strong>把源码放到共享缓存。</strong>Runner checkout 后复制到 `/root/.cache/cicd_test/verl`，让 RayJob Pod 和 worker 能拿到同一份提交。</li>
+              <li><strong>生成提交 helper。</strong>`submit_and_wait_rayjob.sh` 用 `jq` 拼出 JSON payload，POST 给 submitter，并消费 `/watch` 事件流。</li>
+              <li><strong>生成多机 wrapper。</strong>`run_multinode_testing.sh` 在 RayJob submitter Pod 中执行，负责复制源码到 `/verl`、安装当前 checkout，并初始化全部 worker。</li>
+              <li><strong>提交并等待结果。</strong>最后通过 `template_patches` 把 worker 资源调整成 64 CPU、512Gi memory、16 NPU 和 128Gi `/dev/shm`。</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="callout" style="margin-top: 22px;">
+          <strong>端到端通过记录：</strong>
+          <a href="https://github.com/verl-project/verl/actions/runs/28231225229/job/83635714775">GitHub Actions run 28231225229 / job 83635714775</a>
+          展示了一次完整提交、watch、训练执行和 cleanup 的通过样例，作为新 workflow 接入后的对照基线。
+        </div>
+
+        <div class="panel" style="margin-top: 22px;">
+          <h3>从 workflow 到 submitter 的 payload 语义</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>字段</th>
+                <th>由谁提供</th>
+                <th>作用</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>repository</code>、<code>commit_sha</code>、<code>branch</code></td>
+                <td>GitHub Actions 环境变量</td>
+                <td>让服务端知道是哪一个仓库、提交和分支触发了任务，并参与校验和标签生成。</td>
+              </tr>
+              <tr>
+                <td><code>github_run_id</code>、<code>github_run_attempt</code></td>
+                <td>GitHub Actions 环境变量</td>
+                <td>生成 RayJob 名称和标签，也是 workflow 结束时批量清理的定位条件。</td>
+              </tr>
+              <tr>
+                <td><code>image</code></td>
+                <td>workflow env</td>
+                <td>替换 RayJob submitter、head、worker 容器镜像，必须匹配 submitter 配置里的镜像前缀白名单。</td>
+              </tr>
+              <tr>
+                <td><code>script</code>、<code>args</code></td>
+                <td>workflow 调用参数</td>
+                <td>生成 RayJob entrypoint。当前 nightly 示例把 wrapper 作为 script，把真实训练脚本作为 `--script-path` 参数。</td>
+              </tr>
+              <tr>
+                <td><code>template_patches</code></td>
+                <td>workflow 调用参数</td>
+                <td>在安全白名单内调整资源、`/dev/shm` 和 Ray 运行参数，不能修改 image、entrypoint、hostPath、安全上下文等字段。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <section id="api" class="section">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">08 / HTTP 接口</p>
+          <h2>workflow 只需要调用 submitter 的 HTTP API</h2>
+        </div>
+        <p class="section-summary">
+          这个项目对外暴露的是一组很窄的 HTTP 接口：健康检查、提交 RayJob、查询状态、观察日志与最终状态、按 workflow attempt 清理。
+          GitHub Actions 里只需要 `curl` 和 `jq` 就可以完成完整闭环。
+        </p>
+      </div>
+
+      <div class="panel">
+        <h3>接口清单</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>接口</th>
+              <th>用途</th>
+              <th>GitHub Actions 中的使用时机</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>GET /healthz</code></td>
+              <td>确认 submitter 服务可访问，返回 <code>{"status":"ok"}</code>。</td>
+              <td>提交任务前先探测网络和 DNS。</td>
+            </tr>
+            <tr>
+              <td><code>POST /api/v1/rayjobs</code></td>
+              <td>提交一次 RayJob。服务端校验请求、渲染模板、创建 RayJob CR，并返回 <code>job_id</code>。</td>
+              <td>准备好源码缓存、镜像、脚本和资源 patch 后调用。</td>
+            </tr>
+            <tr>
+              <td><code>GET /api/v1/rayjobs/{job_id}</code></td>
+              <td>查询 RayJob 当前归一化状态，以及 KubeRay 原始 <code>jobStatus</code> 和 <code>jobDeploymentStatus</code>。</td>
+              <td>临时排障或需要单次状态查询时使用。</td>
+            </tr>
+            <tr>
+              <td><code>GET /api/v1/rayjobs/{job_id}/watch?format=ndjson</code></td>
+              <td>持续输出 <code>status</code>、<code>log</code>、<code>error</code>、<code>final</code> 事件。</td>
+              <td>CI 主等待逻辑。只有 <code>final</code> 事件决定成功或失败。</td>
+            </tr>
+            <tr>
+              <td><code>GET /api/v1/rayjobs/{job_id}/logs/stream</code></td>
+              <td>只流式读取 RayJob submitter Pod 的原始日志。</td>
+              <td>一般不作为主流程使用，排查日志链路时可直接打开。</td>
+            </tr>
+            <tr>
+              <td><code>DELETE /api/v1/workflows/{github_run_id}?attempt=N</code></td>
+              <td>删除本次 workflow attempt 创建的所有 RayJob。</td>
+              <td>workflow 最后一步用 <code>if: always()</code> 调用。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="two-col" style="margin-top: 22px;">
+        <div>
+          <div class="code-block">
+            <div class="code-title">
+              <span>提交 RayJob：POST /api/v1/rayjobs</span>
+              <span>workflow run step 中的核心写法</span>
+            </div>
+            <pre><code>args_json='["--script-path","/verl/tests/special_npu/your_test.sh"]'
+env_json='{}'
+patches_json='[
+  {
+    "op": "replace",
+    "path": "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/limits/memory",
+    "value": "512Gi"
+  }
+]'
+
+payload="$(jq -n \
+  --arg repository "${GITHUB_REPOSITORY}" \
+  --arg commit_sha "${GITHUB_SHA}" \
+  --arg branch "${GITHUB_REF_NAME}" \
+  --arg github_run_id "${GITHUB_RUN_ID}" \
+  --arg github_run_attempt "${GITHUB_RUN_ATTEMPT:-1}" \
+  --arg image "${IMAGE}" \
+  --arg name_suffix "multinode-e2e" \
+  --arg script "/root/.cache/cicd_test/run_multinode_testing.sh" \
+  --argjson args "${args_json}" \
+  --argjson env "${env_json}" \
+  --argjson template_patches "${patches_json}" \
+  --arg worker_replicas "${WORKER_REPLICAS:-2}" \
+  '{
+    repository: $repository,
+    commit_sha: $commit_sha,
+    branch: $branch,
+    github_run_id: $github_run_id,
+    github_run_attempt: $github_run_attempt,
+    image: $image,
+    name_suffix: $name_suffix,
+    script: $script,
+    args: $args,
+    env: $env,
+    worker_replicas: ($worker_replicas | tonumber),
+    template_patches: $template_patches
+  }')"
+
+response="$(curl -sS -X POST \
+  "${SUBMITTER_URL}/api/v1/rayjobs" \
+  -H "Content-Type: application/json" \
+  -d "${payload}")"
+
+job_id="$(printf '%s' "${response}" | jq -r '.job_id')"</code></pre>
+          </div>
+        </div>
+
+        <div>
+          <div class="code-block">
+            <div class="code-title">
+              <span>等待结果：消费 watch 事件</span>
+              <span>只以 final 事件判断成败</span>
+            </div>
+            <pre><code>final_status_file="/tmp/rayjob-final-status-${job_id}"
+rm -f "${final_status_file}"
+
+curl -N -sS \
+  "${SUBMITTER_URL}/api/v1/rayjobs/${job_id}/watch?format=ndjson" |
+while IFS= read -r event; do
+  type="$(printf '%s' "${event}" | jq -r '.type // empty')"
+
+  case "${type}" in
+    log)
+      printf '%s' "${event}" | jq -r '.line // ""'
+      ;;
+    status)
+      printf '%s' "${event}" |
+        jq -r '"[rayjob status] " + (.status // "UNKNOWN")'
+      ;;
+    final)
+      status="$(printf '%s' "${event}" | jq -r '.status')"
+      printf '%s' "${status}" > "${final_status_file}"
+      ;;
+  esac
+done
+
+final_status="$(cat "${final_status_file}" 2>/dev/null || true)"
+case "${final_status}" in
+  SUCCEEDED) exit 0 ;;
+  FAILED|TIMEOUT|NOT_FOUND) exit 1 ;;
+  *) echo "Watch ended without successful final status."; exit 1 ;;
+esac</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-title">
+          <span>主动清理：workflow 最后一段固定写法</span>
+          <span>避免 RayJob/RayCluster 残留占用资源</span>
+        </div>
+        <pre><code>- name: Cleanup RayJobs
+  if: always()
+  run: |
+    curl -sS -X DELETE \
+      "${SUBMITTER_URL}/api/v1/workflows/${GITHUB_RUN_ID}?attempt=${GITHUB_RUN_ATTEMPT:-1}"</code></pre>
+      </div>
+
+      <div class="callout">
+        实际 workflow 将提交和 watch 封装成 `submit_and_wait_rayjob.sh`，每个 CI 任务只传
+        `name_suffix`、`script`、`args_json`、`env_json`、`template_patches_json` 五个参数。
+        <a href="https://github.com/verl-project/verl/blob/main/.github/workflows/nightly_ascend_multinode.yml">nightly_ascend_multinode.yml</a>
+        就是这个调用模式。
+      </div>
+    </section>
+
+    <section id="limits" class="section">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">09 / 变更限制</p>
+          <h2>workflow 修改需要匹配 submitter 校验和部署配置</h2>
+        </div>
+        <p class="section-summary">
+          submitter 在创建 RayJob 前执行请求校验。workflow 修改镜像、脚本、worker 数、env 或 template_patches 后，
+          常见失败会以 4xx validation error 返回，并在响应体中给出校验原因。
+        </p>
+      </div>
+
+      <div class="panel">
+        <h3>限制项、修改入口和部署动作</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>限制项</th>
+              <th>触发失败的典型修改</th>
+              <th>修改入口</th>
+              <th>重新部署路径</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>ALLOWED_REPOSITORY</code></td>
+              <td><code>repository</code> 不等于允许仓库。</td>
+              <td><code>deploy/deployment.yaml</code> env。</td>
+              <td><code>kubectl apply -f deploy/deployment.yaml</code> 后等待 Deployment rollout。</td>
+            </tr>
+            <tr>
+              <td><code>ALLOWED_IMAGE_PREFIXES</code></td>
+              <td>workflow 换了新镜像仓库或镜像前缀。</td>
+              <td><code>deploy/deployment.yaml</code> env。</td>
+              <td>更新 env 后重新 apply submitter Deployment。</td>
+            </tr>
+            <tr>
+              <td><code>ALLOWED_SCRIPT_PREFIXES</code></td>
+              <td><code>script</code> 指向新的共享缓存目录、绝对路径或业务目录。</td>
+              <td><code>deploy/deployment.yaml</code> env。</td>
+              <td>更新 env 后重新 apply submitter Deployment；workflow 中的 wrapper 路径同步调整。</td>
+            </tr>
+            <tr>
+              <td><code>WORKER_REPLICAS</code> / <code>MAX_WORKER_REPLICAS</code></td>
+              <td><code>worker_replicas</code> 超过服务端上限，或默认 worker 数大于最大值。</td>
+              <td><code>deploy/deployment.yaml</code> env，同时核对 Kueue quota。</td>
+              <td>更新 submitter Deployment；队列容量变化同时 apply 对应 <code>kueue/*.yaml</code>。</td>
+            </tr>
+            <tr>
+              <td><code>MAX_ARGS</code> / <code>MAX_ARG_LENGTH</code></td>
+              <td>训练脚本参数过多、单个参数过长，或参数中包含不安全字符。</td>
+              <td><code>deploy/deployment.yaml</code> env；不安全字符校验位于 Go 代码。</td>
+              <td>数量和长度只改 env；字符规则变化需要改代码、测试、构建镜像、更新 Deployment。</td>
+            </tr>
+            <tr>
+              <td><code>MAX_EXTRA_ENV</code> / <code>MAX_ENV_VALUE_LENGTH</code></td>
+              <td>workflow 追加 env 太多、value 过长，或使用 <code>PATH</code>、<code>PYTHONPATH</code>、<code>RAY_ADDRESS</code> 等保护 env。</td>
+              <td>数量和长度在 <code>deploy/deployment.yaml</code>；保护列表在 <code>internal/rayjob/validate.go</code>。</td>
+              <td>env 上限只改部署配置；保护列表变化需要代码发布。</td>
+            </tr>
+            <tr>
+              <td><code>MAX_TEMPLATE_PATCHES</code> / <code>MAX_TEMPLATE_PATCH_VALUE_LENGTH</code></td>
+              <td>template patch 数量过多，或 value 超过长度限制。</td>
+              <td><code>deploy/deployment.yaml</code> env。</td>
+              <td>更新 env 后重新 apply submitter Deployment。</td>
+            </tr>
+            <tr>
+              <td>template patch 路径白名单</td>
+              <td>patch <code>image</code>、<code>entrypoint</code>、<code>metadata</code>、<code>hostPath</code>、<code>securityContext</code>、<code>volumeMounts</code>、<code>nodeSelector</code>、<code>affinity</code>、<code>tolerations</code>。</td>
+              <td><code>internal/rayjob/template_patch.go</code>。</td>
+              <td>修改白名单需要补测试，执行 <code>go test ./...</code>，构建并推送 submitter 镜像，再更新 Deployment。</td>
+            </tr>
+            <tr>
+              <td><code>RAYJOB_TEMPLATE_PATH</code></td>
+              <td>切换 A2/A3 模板、启用 Kueue 模板，或模板路径不存在。</td>
+              <td><code>deploy/deployment.yaml</code> env；模板内容在 <code>templates/verl-rayjob*.yaml</code>。</td>
+              <td>只改路径时重新 apply Deployment；改模板内容时重新构建镜像并更新 Deployment 镜像。</td>
+            </tr>
+            <tr>
+              <td><code>WATCH_TIMEOUT_SECONDS</code> / <code>LOG_HEAD_WAIT_SECONDS</code></td>
+              <td>多机任务排队或训练时间超过 watch 超时，日志 Pod 启动慢导致日志等待提前结束。</td>
+              <td><code>deploy/deployment.yaml</code> env。</td>
+              <td>更新 env 后重新 apply submitter Deployment。</td>
+            </tr>
+            <tr>
+              <td>Kueue quota / flavor / queue</td>
+              <td>资源池不足、硬件标签不匹配、RayJob 未携带 queue 标签或 <code>spec.suspend: true</code>。</td>
+              <td><code>kueue/*.yaml</code>、目标 RayJob 模板、命名空间 label。</td>
+              <td>apply Kueue 资源；模板变化按镜像内置模板发布；命名空间 label 使用 <code>kubectl label namespace</code> 更新。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="three-col" style="margin-top: 22px;">
+        <div class="panel">
+          <h3>只改 workflow</h3>
+          <p>镜像前缀、脚本前缀、worker 上限、patch 路径都已经被允许时，只需要修改业务仓库里的 workflow 和训练脚本。</p>
+        </div>
+        <div class="panel">
+          <h3>只改部署配置</h3>
+          <p>镜像白名单、脚本白名单、worker 上限、watch timeout、cleanup TTL、patch 数量上限属于 submitter env，更新 <code>deploy/deployment.yaml</code> 后重新 apply。</p>
+        </div>
+        <div class="panel">
+          <h3>需要代码发布</h3>
+          <p>新增允许的 patch 路径、改变保护 env、放宽参数字符规则，属于服务端校验逻辑变更，需要测试、构建镜像并滚动 Deployment。</p>
+        </div>
+      </div>
+
+      <div class="code-block" style="margin-top: 22px;">
+        <div class="code-title">
+          <span>submitter 配置更新后的固定验证</span>
+          <span>部署生效和 API 可用性</span>
+        </div>
+        <pre><code>kubectl apply -f deploy/deployment.yaml
+kubectl -n ci-system rollout status deploy/rayjob-submitter
+
+kubectl -n ci-system get deploy rayjob-submitter \
+  -o jsonpath='{.spec.template.spec.containers[0].env}'
+
+curl -sS http://rayjob-submitter.ci-system.svc.cluster.local/healthz</code></pre>
+      </div>
+    </section>
+
+    <section id="patches" class="section">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">10 / 安全调参</p>
+          <h2>template_patches 是受限 JSON Patch，不是任意 YAML 入口</h2>
+        </div>
+        <p class="section-summary">
+          这让 workflow 能应对 OOM、`/dev/shm` 不足、Ray 参数变化等 CI 调参需求，同时不开放任意 hostPath、镜像、权限或调度约束。
+        </p>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <h3>允许的第一版范围</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>目标</th>
+                <th>路径形态</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>submitter/head/worker 容器资源</td>
+                <td><code>resources.requests/*</code> 和 <code>resources.limits/*</code></td>
+              </tr>
+              <tr>
+                <td>head/worker dshm</td>
+                <td><code>volumes/1/emptyDir/sizeLimit</code></td>
+              </tr>
+              <tr>
+                <td>head/worker Ray 参数</td>
+                <td><code>rayStartParams/*</code></td>
+              </tr>
+              <tr>
+                <td>head/worker env 追加</td>
+                <td>路径以 <code>/env/-</code> 结尾，只能新增非保护环境变量</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <h3>禁止 patch 的关键字段</h3>
+          <ul>
+            <li><code>metadata</code>、<code>spec.entrypoint</code>、容器 <code>image</code></li>
+            <li><code>hostPath</code>、<code>volumeMounts</code>、任意 <code>volumes</code></li>
+            <li><code>securityContext</code>、<code>serviceAccountName</code></li>
+            <li><code>nodeSelector</code>、<code>affinity</code>、<code>tolerations</code></li>
+            <li>受保护 env，例如 <code>PATH</code>、<code>PYTHONPATH</code>、<code>RAY_ADDRESS</code></li>
+          </ul>
+          <div class="callout">
+            JSON Pointer 中资源名里的斜杠要转义，`huawei.com/ascend-1980` 在 path 中写成 `huawei.com~1ascend-1980`。
+          </div>
+        </div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-title">
+          <span>常见 patch 示例</span>
+          <span>资源、dshm、Ray 参数、env</span>
+        </div>
+        <pre><code>[
+  {
+    "op": "replace",
+    "path": "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/limits/memory",
+    "value": "512Gi"
+  },
+  {
+    "op": "replace",
+    "path": "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/volumes/1/emptyDir/sizeLimit",
+    "value": "128Gi"
+  },
+  {
+    "op": "add",
+    "path": "/spec/rayClusterSpec/workerGroupSpecs/0/rayStartParams/memory-usage-threshold",
+    "value": "0.98"
+  },
+  {
+    "op": "add",
+    "path": "/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/env/-",
+    "value": {"name": "RAY_memory_usage_threshold", "value": "0.98"}
+  }
+]</code></pre>
+      </div>
+    </section>
+
+    <div class="band">
+      <section id="onboarding" class="section">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">11 / 接入指南</p>
+            <h2>新的多机 CI 接入流程</h2>
+          </div>
+          <p class="section-summary">
+            新 workflow 通过固定提交协议接入，不直接处理 Kubernetes 细节。
+            接入时复用 nightly 的结构，并替换镜像、脚本路径和资源 patch。
+          </p>
+        </div>
+
+        <div class="steps">
+          <div class="step">
+            <div>
+              <h3>确认运行环境和网络</h3>
+              <p>runner 需要能解析并访问 `rayjob-submitter.ci-system.svc.cluster.local`，workflow 中可以先调用 `/healthz` 做快速探测。</p>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <h3>准备镜像</h3>
+              <p>镜像需要包含训练运行时、Ascend 依赖和基础工具；镜像前缀必须被 submitter 的 `ALLOWED_IMAGE_PREFIXES` 允许。</p>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <h3>复制源码到共享缓存</h3>
+              <p>把当前 checkout 复制到 `/root/.cache/cicd_test/verl`，避免 RayJob Pod 使用镜像里的旧源码。</p>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <h3>选择入口脚本</h3>
+              <p>`script` 指向共享缓存中的 wrapper，`args` 传真实训练脚本，例如 `/verl/tests/special_npu/...sh`。</p>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <h3>声明 worker 规模</h3>
+              <p>按目标拓扑设置 `WORKER_REPLICAS=N`，并通过资源 patch 设置每个 worker 的 `huawei.com/ascend-1980=M`。nightly 当前实例为 `N=2, M=16`。</p>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <h3>通过 template_patches 调资源</h3>
+              <p>OOM 时优先 patch worker memory 和 dshm；需要 Ray 行为调优时 patch `rayStartParams` 或追加非保护 env。</p>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <h3>消费 watch final 作为结果</h3>
+              <p>helper 应持续读取 `/watch?format=ndjson`，把日志打印到 GitHub Actions，并只以 `final` 事件决定 workflow 成败。</p>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <h3>Cleanup 固定收尾</h3>
+              <p>workflow 最后一段使用 `if: always()` 调用 DELETE。后台 stale cleanup 是兜底，不应替代主动清理。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="code-block" style="margin-top: 22px;">
+          <div class="code-title">
+            <span>最小 workflow 骨架</span>
+            <span>nightly 模式的最小化版本</span>
+          </div>
+          <pre><code>env:
+  SUBMITTER_URL: http://rayjob-submitter.ci-system.svc.cluster.local
+  IMAGE: your-allowed-image
+  WORKER_REPLICAS: "2"
+
+steps:
+  - uses: actions/checkout@v4
+
+  - name: Copy checkout to shared cache
+    run: |
+      rm -rf /root/.cache/cicd_test/verl
+      mkdir -p /root/.cache/cicd_test/verl
+      tar --exclude=.git -cf - . | tar -xf - -C /root/.cache/cicd_test/verl
+
+  - name: Prepare helpers
+    run: |
+      # 写入 submit_and_wait_rayjob.sh 和 run_multinode_testing.sh。
+      # 完整实现参考：
+      # https://github.com/verl-project/verl/blob/main/.github/workflows/nightly_ascend_multinode.yml
+
+  - name: Run RayJob
+    run: |
+      /root/.cache/cicd_test/submit_and_wait_rayjob.sh \
+        multinode-e2e \
+        /root/.cache/cicd_test/run_multinode_testing.sh \
+        '["--script-path","/verl/tests/special_npu/your_multinode_test.sh"]' \
+        '{}' \
+        '[{"op":"replace","path":"/spec/rayClusterSpec/workerGroupSpecs/0/template/spec/containers/0/resources/limits/memory","value":"512Gi"}]'
+
+  - name: Cleanup RayJobs
+    if: always()
+    run: |
+      curl -sS -X DELETE \
+        "${SUBMITTER_URL}/api/v1/workflows/${GITHUB_RUN_ID}?attempt=${GITHUB_RUN_ATTEMPT:-1}"</code></pre>
+        </div>
+      </section>
+    </div>
+
+    <section id="principles" class="section">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">12 / 设计原则</p>
+          <h2>系统边界与职责划分</h2>
+        </div>
+        <p class="section-summary">
+          workflow、submitter 和 RayJob 模板分别承担不同职责，三层边界共同保证 CI 的灵活性、安全性和可维护性。
+        </p>
+      </div>
+
+      <div class="three-col">
+        <div class="panel">
+          <h3>workflow 负责业务选择</h3>
+          <p>它决定跑哪个提交、哪个镜像、哪个训练脚本，以及这次 CI 需要的资源参数。它不直接创建 Kubernetes 资源。</p>
+        </div>
+        <div class="panel">
+          <h3>submitter 负责控制面安全</h3>
+          <p>它校验输入、渲染模板、创建 RayJob、观察状态、读取日志、按 run attempt 清理资源，并处理残留任务兜底。</p>
+        </div>
+        <div class="panel">
+          <h3>模板负责集群约束</h3>
+          <p>节点选择、hostPath、NPU 驱动挂载、安全上下文、基础 env 和 RayCluster 结构都在模板中固化。</p>
+        </div>
+      </div>
+
+      <div class="talk-track" style="margin-top: 22px;">
+        <strong>设计取舍：</strong>
+        系统只暴露 CI 所需的窄接口，而不是把 Kubernetes 和 RayJob 的全部能力交给 workflow。
+        资源不足时通过白名单 patch 调整 memory 和 `/dev/shm`，Ray 参数需要变化时通过 `rayStartParams` 调整；
+        hostPath、权限、镜像来源和 entrypoint 等高风险字段仍由服务端模板和校验逻辑控制。
+        这样既保留 CI 调参能力，又避免每条流水线演变成高权限 Kubernetes YAML。
+      </div>
+    </section>
+
+    <div class="band">
+      <section id="troubleshooting" class="section">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">13 / 排障</p>
+            <h2>常见失败信号和定位思路</h2>
+        </div>
+        <p class="section-summary">
+            多机 CI 的失败通常不是单点问题。排查路径按提交前校验、RayJob 创建、集群启动、训练脚本执行和资源清理五类展开。
+          </p>
+        </div>
+
+        <div class="two-col">
+          <div class="panel">
+            <h3>失败类型对照</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>现象</th>
+                  <th>优先检查</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>POST 返回 4xx validation error</td>
+                  <td>仓库名、镜像前缀、script 前缀、branch 格式、template_patches 白名单路径。</td>
+                </tr>
+                <tr>
+                  <td>wrapper 报 `/root/.cache/cicd_test/verl` 不存在</td>
+                  <td>runner 是否成功复制 checkout，RayJob Pod 是否挂到了同一份 `/root/.cache`。</td>
+                </tr>
+                <tr>
+                  <td>Ray worker 数量不对</td>
+                  <td>`WORKER_REPLICAS`、模板 worker replicas、`EXPECTED_WORKERS`、KubeRay worker pod 是否调度成功。</td>
+                </tr>
+                <tr>
+                  <td>OOM 或容器被杀</td>
+                  <td>worker memory、`/dev/shm`、Ray memory threshold、训练 batch 配置。</td>
+                </tr>
+                <tr>
+                  <td>watch 结束但没有成功 final</td>
+                  <td>submitter watch timeout、RayJob CR 状态、RayJob submitter Pod 日志是否完整。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="panel">
+            <h3>多机规模相关提醒</h3>
+            <div class="danger callout">
+              如果训练使用全部 worker NPU，data parallel size 通常等于 `worker_replicas x 每 worker NPU 数`。
+              nightly 的 2 x 16 拓扑对应 32。类似 `Got mini_batch_size=16 and self.engine.get_data_parallel_size()=32` 的错误说明 mini batch 不能被 DP size 整除。
+            </div>
+            <p style="margin-top: 16px;">
+              当前 nightly 示例通过 worker resource patch 把每个 worker 调到 `64 CPU / 512Gi / 16 NPU`，
+              同时把 worker dshm 调到 `128Gi`。如果还是 OOM，优先确认训练脚本里 global batch、mini batch、model parallel 和 offload 配置是否匹配目标卡数。
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section id="closing" class="section">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">14 / 总结</p>
+          <h2>总结：窄接口承载多机多卡 CI</h2>
+        </div>
+        <p class="section-summary">
+          多机多卡 CI 中最容易失控的部分被收束为一个窄接口：模板固定安全边界，workflow 做可审计的参数化提交，KubeRay 负责实际编排。
+        </p>
+      </div>
+
+      <div class="panel">
+        <div class="talk-track">
+          <strong>总结：</strong>
+          多机 CI 的价值在于把“昂贵资源的临时使用”变成“可提交、可观察、可清理、可复用”的平台能力。
+          新增流水线复用同一套 submit helper、同一份 RayJob 模板和同一套 watch/cleanup 语义，
+          训练脚本可以继续快速演进，CI 基础设施保持安全和稳定。
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div>
+        <h2>参考文件</h2>
+        <p>内容基于 rayjob-submitter 代码、部署配置和 verl workflow 示例整理。</p>
+        <ul>
+          <li><code>docs/design.md</code></li>
+          <li><code>README.md</code></li>
+          <li><code>deploy/deployment.yaml</code></li>
+          <li><code>templates/verl-rayjob.yaml</code></li>
+          <li><a href="https://github.com/verl-project/verl/blob/main/.github/workflows/nightly_ascend_multinode.yml">verl-project/verl: nightly_ascend_multinode.yml</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>适用场景</h2>
+        <p>
+          面向需要在 GitHub Actions 中触发 Ascend 多机多卡训练、同时避免 workflow 直接持有 Kubernetes 写权限的 CI 系统。
+        </p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
