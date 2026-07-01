@@ -1,0 +1,94 @@
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: WorkloadPriorityClass
+metadata:
+  name: ray-high
+value: 10000
+description: "High priority for multi-node RayJob workloads"
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: WorkloadPriorityClass
+metadata:
+  name: default
+value: 1000
+description: "Default low priority for single-node workloads"
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: WorkloadPriorityClass
+metadata:
+  name: single-normal
+value: 1000
+description: "Normal priority for single-node workloads"
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: a2-normal
+spec:
+  nodeLabels:
+    accelerator: huawei-Ascend910
+    verl-worker: "false"
+    kubernetes.io/arch: arm64
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: a2-dual
+spec:
+  nodeLabels:
+    accelerator: huawei-Ascend910
+    verl-worker: "true"
+    kubernetes.io/arch: arm64
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: ray-npu-cq
+spec:
+  queueingStrategy: BestEffortFIFO
+
+  preemption:
+    withinClusterQueue: LowerPriority
+
+  namespaceSelector:
+    matchLabels:
+      kueue-pool: ray-npu
+
+  resourceGroups:
+    - coveredResources:
+        - cpu
+        - memory
+        - huawei.com/Ascend910
+      flavors:
+        - name: a2-normal
+          resources:
+            - name: cpu
+              nominalQuota: "1408"
+            - name: memory
+              nominalQuota: 9600Gi
+            - name: huawei.com/Ascend910
+              nominalQuota: "47"
+
+        - name: a2-dual
+          resources:
+            - name: cpu
+              nominalQuota: "512"
+            - name: memory
+              nominalQuota: 2900Gi
+            - name: huawei.com/Ascend910
+              nominalQuota: "16"
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: default
+  namespace: ray
+spec:
+  clusterQueue: ray-npu-cq
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: default
+  namespace: verl
+spec:
+  clusterQueue: ray-npu-cq
