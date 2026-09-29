@@ -1,3 +1,231 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rayjob-submitter-template
+  namespace: ci-system
+  labels:
+    app: rayjob-submitter
+data:
+  verl-rayjob.yaml: |
+    apiVersion: ray.io/v1
+    kind: RayJob
+    metadata:
+      name: verl-qwen3-06b-ppo-multinode
+      namespace: ray
+    spec:
+      # entrypoint 是你在镜像里的多节点训练脚本
+      entrypoint: bash /verl/tests/special_npu/run_qwen3_06b_ppo_multinode.sh
+      # 自动销毁 RayCluster
+      shutdownAfterJobFinishes: true
+      ttlSecondsAfterFinished: 60
+      # RayJob submitter Pod 配置
+      submitterPodTemplate:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: ray-job-submitter
+              image: quay.io/ascend/verl:verl-9.0.0-910b-ubuntu22.04-py3.11-latest
+              imagePullPolicy: IfNotPresent
+              resources:
+                requests:
+                  cpu: "2"
+                  memory: "4Gi"
+                limits:
+                  cpu: "4"
+                  memory: "8Gi"
+      # RayCluster 规格
+      rayClusterSpec:
+        rayVersion: "2.9.0"
+        headGroupSpec:
+            rayStartParams:
+                dashboard-host: "0.0.0.0"
+                num-cpus: "0"
+            template:
+                metadata:
+                    labels:
+                        app: verl-ray-head
+                spec:
+                    nodeSelector:
+                        kubernetes.io/arch: arm64
+                        accelerator/huawei-npu: ascend-snt9c
+                    volumes:
+                        - name: nfs-cache
+                          hostPath:
+                              path: /root/.cache
+                              type: Directory
+                        # 声明 Head 节点的 shm 内存卷
+                        - name: dshm
+                          emptyDir:
+                              medium: Memory
+                              sizeLimit: "16Gi" # Head 节点内存总共 32G，分 16G 给 shm
+                        # 核心注入：声明宿主机 npu-smi 工具及其依赖的底层驱动库卷
+                        - name: host-npu-smi
+                          hostPath:
+                            path: /usr/local/sbin/npu-smi
+                            type: File # 明确指定挂载单文件
+                        - name: host-ascend-driver
+                          hostPath:
+                            path: /usr/local/Ascend/driver
+                            type: Directory # 挂载驱动目录，提供动态链接库支持
+                        # 挂载宿主机日志目录
+                        - name: host-npu-log
+                          hostPath:
+                            path: /var/log/npu
+                            type: DirectoryOrCreate
+                    containers:
+                        - name: ray-head
+                          image: quay.io/ascend/verl:verl-9.0.0-910b-ubuntu22.04-py3.11-latest
+                          imagePullPolicy: IfNotPresent
+                          workingDir: /root
+                          securityContext:
+                              privileged: true
+                          env:
+                              - name: HF_ENDPOINT
+                                value: "https://hf-mirror.com"
+                              - name: HF_HUB_ENABLE_HF_TRANSFER
+                                value: "0"
+                              - name: HCCL_CONNECT_TIMEOUT
+                                value: "600"
+                              - name: UV_EXTRA_INDEX_URL
+                                value: "https://repo.huaweicloud.com/ascend/repos/pypi"
+                              - name: UV_INDEX_STRATEGY
+                                value: unsafe-best-match
+                              - name: UV_INSECURE_HOST
+                                value: cache-service.nginx-pypi-cache.svc.cluster.local
+                              - name: UV_HTTP_TIMEOUT
+                                value: "120"
+                              - name: UV_NO_CACHE
+                                value: "1"
+                              - name: UV_SYSTEM_PYTHON
+                                value: "1"
+                              - name: PYTHONPATH
+                                value: "/Megatron-LM:/MindSpeed:/vllm:/verl:/usr/local/Ascend/cann-9.0.0/python/site-packages:/usr/local/Ascend/cann-9.0.0/opp/built-in/op_impl/ai_core/tbe:/usr/local/Ascend/ascend-toolkit/latest/python/site-packages:/usr/local/Ascend/ascend-toolkit/latest/opp/built-in/op_impl/ai_core/tbe"
+                          volumeMounts:
+                              - name: nfs-cache
+                                mountPath: /root/.cache
+                              # 将 shm 挂载到容器的 /dev/shm
+                              - name: dshm
+                                mountPath: /dev/shm
+                              # 核心映射：将宿主机工具和库投射到容器的标准路径中
+                              - name: host-npu-smi
+                                mountPath: /usr/local/sbin/npu-smi # 保持路径一致，完美对接原厂镜像的隐式调用
+                              - name: host-ascend-driver
+                                mountPath: /usr/local/Ascend/driver # 填补容器内缺失的动态库
+                              - name: host-npu-log
+                                mountPath: /var/log/npu
+                          ports:
+                              - containerPort: 6379
+                                name: gcs
+                              - containerPort: 8265
+                                name: dashboard
+                              - containerPort: 10001
+                                name: client
+                          resources:
+                              requests:
+                                  cpu: "8"
+                                  memory: "32Gi"
+                              limits:
+                                  cpu: "8"
+                                  memory: "32Gi"
+        workerGroupSpecs:
+            - groupName: arm-ascend-workers
+              replicas: 2
+              minReplicas: 2
+              maxReplicas: 2
+              rayStartParams: {}
+              template:
+                  metadata:
+                      labels:
+                          app: verl-ray-worker
+                  spec:
+                      nodeSelector:
+                          kubernetes.io/arch: arm64
+                          accelerator/huawei-npu: ascend-snt9c
+                      volumes:
+                          - name: nfs-cache
+                            hostPath:
+                                path: /root/.cache
+                                type: Directory
+                          # 声明 Worker 节点的 shm 内存卷（多卡训练主力，建议开大）
+                          - name: dshm
+                            emptyDir:
+                                medium: Memory
+                                sizeLimit: "128Gi" # Worker 内存总共 256G，分配 128G 给 shm
+                          # 核心注入：声明宿主机 npu-smi 工具及其依赖的底层驱动库卷
+                          - name: host-npu-smi
+                            hostPath:
+                              path: /usr/local/sbin/npu-smi
+                              type: File # 明确指定挂载单文件
+                          - name: host-ascend-driver
+                            hostPath:
+                              path: /usr/local/Ascend/driver
+                              type: Directory # 挂载驱动目录，提供动态链接库支持
+                          # 挂载宿主机日志目录
+                          - name: host-npu-log
+                            hostPath:
+                              path: /var/log/npu
+                              type: DirectoryOrCreate
+                      affinity:
+                          podAntiAffinity:
+                              requiredDuringSchedulingIgnoredDuringExecution:
+                                  - labelSelector:
+                                        matchExpressions:
+                                            - key: app
+                                              operator: In
+                                              values:
+                                                  - verl-ray-worker
+                                    topologyKey: kubernetes.io/hostname
+                      containers:
+                          - name: ray-worker
+                            image: quay.io/ascend/verl:verl-9.0.0-910b-ubuntu22.04-py3.11-latest
+                            imagePullPolicy: IfNotPresent
+                            workingDir: /root
+                            securityContext:
+                                privileged: true
+                            env:
+                                - name: HF_ENDPOINT
+                                  value: "https://hf-mirror.com"
+                                - name: HF_HUB_ENABLE_HF_TRANSFER
+                                  value: "0"
+                                - name: HCCL_CONNECT_TIMEOUT
+                                  value: "600"
+                                - name: UV_EXTRA_INDEX_URL
+                                  value: "https://repo.huaweicloud.com/ascend/repos/pypi"
+                                - name: UV_INDEX_STRATEGY
+                                  value: unsafe-best-match
+                                - name: UV_INSECURE_HOST
+                                  value: cache-service.nginx-pypi-cache.svc.cluster.local
+                                - name: UV_HTTP_TIMEOUT
+                                  value: "120"
+                                - name: UV_NO_CACHE
+                                  value: "1"
+                                - name: UV_SYSTEM_PYTHON
+                                  value: "1"
+                                - name: PYTHONPATH
+                                  value: "/Megatron-LM:/MindSpeed:/vllm:/verl:/usr/local/Ascend/cann-9.0.0/python/site-packages:/usr/local/Ascend/cann-9.0.0/opp/built-in/op_impl/ai_core/tbe:/usr/local/Ascend/ascend-toolkit/latest/python/site-packages:/usr/local/Ascend/ascend-toolkit/latest/opp/built-in/op_impl/ai_core/tbe"
+                            volumeMounts:
+                                - name: nfs-cache
+                                  mountPath: /root/.cache
+                                # 将 shm 挂载到 Worker 容器的 /dev/shm
+                                - name: dshm
+                                  mountPath: /dev/shm
+                                # 核心映射：将宿主机工具和库投射到容器的标准路径中
+                                - name: host-npu-smi
+                                  mountPath: /usr/local/sbin/npu-smi # 保持路径一致，完美对接原厂镜像的隐式调用
+                                - name: host-ascend-driver
+                                  mountPath: /usr/local/Ascend/driver # 填补容器内缺失的动态库
+                                - name: host-npu-log
+                                  mountPath: /var/log/npu
+                            resources:
+                                requests:
+                                    cpu: "64"
+                                    memory: "256Gi"
+                                    huawei.com/ascend-1980: "16"
+                                limits:
+                                    cpu: "64"
+                                    memory: "256Gi"
+                                    huawei.com/ascend-1980: "16"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -66,6 +294,11 @@ spec:
           ports:
             - containerPort: 8080
               name: http
+          volumeMounts:
+            - name: rayjob-template
+              mountPath: /app/templates/verl-rayjob.yaml
+              subPath: verl-rayjob.yaml
+              readOnly: true
           resources:
             requests:
               cpu: "100m"
@@ -83,6 +316,13 @@ spec:
               path: /healthz
               port: http
             periodSeconds: 30
+      volumes:
+        - name: rayjob-template
+          configMap:
+            name: rayjob-submitter-template
+            items:
+              - key: verl-rayjob.yaml
+                path: verl-rayjob.yaml
 
 ---
 apiVersion: v1
