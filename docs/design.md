@@ -150,10 +150,23 @@ workflow DELETE 是主清理路径。为防止 GitHub 网页端强制终止导�
 
 `/watch` 内部并发执行：
 
-- status watcher：周期查询 RayJob CR，输出 status，遇到 `SUCCEEDED/FAILED/NOT_FOUND/TIMEOUT` 输出唯一 final。
-- log streamer：等待 RayJob submitter Pod，读取 `ray-job-submitter` 容器日志，逐行输出 log。
+- status watcher：周期查询 RayJob CR，输出 status，并把终态交给协调器。
+- log streamer：等待 RayJob submitter Pod，读取 `ray-job-submitter` 容器日志，逐行输出 log；EOF 或临时错误后自动重新发现 Pod 并重连。
+- coordinator：收到 `SUCCEEDED/FAILED` 后停止实时读取，使用同一游标进行最多 30 秒的非 follow 补读，直到容器终止后的读取完成；所有已接受的日志和诊断之后才输出唯一 final。`TIMEOUT/NOT_FOUND` 不补读，明确提示日志可能不完整。
 
-日志流断开只输出 error，不直接判失败。RayJob status 才是最终裁决。
+日志流断开只输出 error，不直接判失败。RayJob status 才是最终裁决。最终日志补读超时或不可用也不会改变原始 RayJob 结果。
+
+`/watch` 和 `/logs/stream` 共用恢复和终态协调逻辑。独立日志接口仍输出普通文本（无 `::log::` 前缀），包含状态及恢复诊断，并在 RayJob 终态补读后关闭；它也受 `WATCH_TIMEOUT_SECONDS` 限制。客户端断连或写入/flush 失败立即取消后台工作，支持写超时的 HTTP writer 每次写入最多等待 15 秒。
+
+首次读取每个容器只获取最近 1000 行，因此不保证包含任务开始以来的全部日志。重连请求不再带 tail 限制，以最后已接受的 Kubernetes 时间戳减去 2 秒并向下取整到秒作为 `sinceTime`；这覆盖 client-go 的秒级时间序列化。时间戳从原文中剥离，事件 `timestamp` 仍为发送时间。重放窗口按时间戳和行内容记录出现次数，保留相同时间戳的重复行。EOF/临时错误采用带抖动的指数退避（约 0.5–30 秒）；有新日志才重置退避。
+
+恢复限制：
+
+- 游标绑定 Pod UID、容器名、restart count 和 container ID；Pod/容器变化会重置并诊断。选择最新创建的 submitter Pod，不读取旧容器的 `previous` 日志。
+- Kubernetes 已轮转或删除的日志无法恢复。时间戳乱序超过重放窗口时也不能保证完整恢复。
+- 重放窗口最多跟踪 65,536 个不同记录摘要；超过后明确诊断并关闭该容器的重放去重，允许重复，保持内存有界。格式错误的时间戳行原样输出，可能重放重复；没有有效游标时重连读取所有仍保留的日志。
+- 超过 4 MiB scanner 上限的行会报告不可恢复的日志缺口并停止日志读取，避免无限重试。授权错误等永久错误也停止日志读取，但状态轮询继续。
+- 初始 Pod 发现仍受 `LOG_HEAD_WAIT_SECONDS` 限制；发现过 Pod 后的重连不受该初始限制。最终补读有独立的 30 秒上限，并可能延长终态响应时间。
 
 ## 命名和标签
 

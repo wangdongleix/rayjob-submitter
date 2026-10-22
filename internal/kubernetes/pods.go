@@ -15,27 +15,24 @@ func FindRayJobSubmitterPod(ctx context.Context, client kubernetes.Interface, na
 	if err != nil {
 		return nil, err
 	}
-	var pending *corev1.Pod
+	var newest *corev1.Pod
 	for i := range pods.Items {
 		pod := &pods.Items[i]
 		if !strings.HasPrefix(pod.Name, jobID+"-") || !hasContainer(pod, "ray-job-submitter") {
 			continue
 		}
-		switch pod.Status.Phase {
-		case corev1.PodRunning:
-			return pod, nil
-		case corev1.PodSucceeded:
-			return pod, nil
-		case corev1.PodFailed:
-			return pod, nil
-		case corev1.PodPending:
-			if pending == nil {
-				pending = pod
-			}
+		// A completed predecessor can coexist with its replacement. Always
+		// rediscover the newest submitter, including a pending replacement.
+		if newest == nil || pod.CreationTimestamp.After(newest.CreationTimestamp.Time) ||
+			(pod.CreationTimestamp.Equal(&newest.CreationTimestamp) && pod.Name > newest.Name) {
+			newest = pod
 		}
 	}
-	if pending != nil {
-		return pending, fmt.Errorf("rayjob submitter pod %s is pending", pending.Name)
+	if newest != nil {
+		if newest.Status.Phase == corev1.PodPending {
+			return newest, fmt.Errorf("rayjob submitter pod %s is pending", newest.Name)
+		}
+		return newest, nil
 	}
 	return nil, fmt.Errorf("rayjob submitter pod not found")
 }
