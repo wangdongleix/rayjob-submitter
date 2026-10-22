@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -165,27 +164,36 @@ func (s *Server) watchRayJob(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	events := make(chan watchEvent, 128)
-	finish := finishOnce(ctx, events)
+	go s.coordinateWatch(ctx, jobID, events)
 
-	go s.watchRayJobStatus(ctx, jobID, events, finish)
-	go s.streamRayJobLogEvents(ctx, jobID, events)
-
-	flusher, _ := w.(http.Flusher)
+	controller := http.NewResponseController(w)
+	defer controller.SetWriteDeadline(time.Time{})
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case ev := <-events:
+			// Bound a blocked client write as well as upstream reads.
+			if err := controller.SetWriteDeadline(time.Now().Add(15 * time.Second)); err != nil && err != http.ErrNotSupported {
+				return
+			}
 			if ev.Timestamp == "" {
 				ev.Timestamp = time.Now().UTC().Format(time.RFC3339)
 			}
+			var err error
 			if format == "ndjson" {
-				_ = json.NewEncoder(w).Encode(ev)
+				err = json.NewEncoder(w).Encode(ev)
 			} else {
-				fmt.Fprintln(w, formatWatchText(ev))
+				_, err = fmt.Fprintln(w, formatWatchText(ev))
 			}
-			if flusher != nil {
-				flusher.Flush()
+			if err != nil {
+				return
+			}
+			if err := controller.Flush(); err != nil && err != http.ErrNotSupported {
+				return
+			}
+			if err := controller.SetWriteDeadline(time.Time{}); err != nil && err != http.ErrNotSupported {
+				return
 			}
 			if ev.Type == "final" {
 				return
@@ -195,11 +203,12 @@ func (s *Server) watchRayJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) watchRayJobStatus(ctx context.Context, jobID string, events chan<- watchEvent, finish func(watchEvent)) {
-	deadline := time.Now().Add(time.Duration(s.cfg.WatchTimeoutSeconds) * time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.WatchTimeoutSeconds)*time.Second)
+	defer cancel()
 	tick := time.Duration(s.cfg.StatusPollSeconds) * time.Second
 	lastStatus := ""
 	for {
-		if time.Now().After(deadline) {
+		if ctx.Err() != nil {
 			finish(watchEvent{Status: "TIMEOUT", Message: "Timed out waiting for RayJob"})
 			return
 		}
@@ -211,6 +220,7 @@ func (s *Server) watchRayJobStatus(ctx context.Context, jobID string, events cha
 		if err != nil {
 			sendEvent(ctx, events, watchEvent{Type: "error", Message: err.Error()})
 			if !sleepOrDone(ctx, tick) {
+				finish(watchEvent{Status: "TIMEOUT", Message: "Timed out waiting for RayJob"})
 				return
 			}
 			continue
@@ -237,39 +247,7 @@ func (s *Server) watchRayJobStatus(ctx context.Context, jobID string, events cha
 			return
 		}
 		if !sleepOrDone(ctx, tick) {
-			return
-		}
-	}
-}
-
-func (s *Server) streamRayJobLogEvents(ctx context.Context, jobID string, events chan<- watchEvent) {
-	deadline := time.Now().Add(time.Duration(s.cfg.LogHeadWaitSeconds) * time.Second)
-	for {
-		pod, err := kubernetes.FindRayJobSubmitterPod(ctx, s.typedClient, s.cfg.TargetNamespace, jobID)
-		if err == nil && pod != nil {
-			sendEvent(ctx, events, watchEvent{Type: "status", Status: rayjob.StatusRunning, Message: "streaming logs from pod " + pod.Name})
-			stream, err := kubernetes.OpenPodLogStream(ctx, s.typedClient, s.cfg.TargetNamespace, pod.Name, "ray-job-submitter", 1000)
-			if err != nil {
-				sendEvent(ctx, events, watchEvent{Type: "error", Message: err.Error()})
-				return
-			}
-			defer stream.Close()
-			scanner := bufio.NewScanner(stream)
-			scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-			for scanner.Scan() {
-				sendEvent(ctx, events, watchEvent{Type: "log", Pod: pod.Name, Container: "ray-job-submitter", Line: scanner.Text()})
-			}
-			if err := scanner.Err(); err != nil && ctx.Err() == nil {
-				sendEvent(ctx, events, watchEvent{Type: "error", Message: "log stream ended: " + err.Error()})
-			}
-			return
-		}
-		if time.Now().After(deadline) {
-			sendEvent(ctx, events, watchEvent{Type: "error", Message: "timed out waiting for RayJob submitter pod"})
-			return
-		}
-		sendEvent(ctx, events, watchEvent{Type: "status", Status: rayjob.StatusPending, Message: "waiting for RayJob submitter pod"})
-		if !sleepOrDone(ctx, 10*time.Second) {
+			finish(watchEvent{Status: "TIMEOUT", Message: "Timed out waiting for RayJob"})
 			return
 		}
 	}
@@ -283,51 +261,38 @@ func (s *Server) streamRayJobLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
-	flusher, _ := w.(http.Flusher)
-	deadline := time.Now().Add(time.Duration(s.cfg.LogHeadWaitSeconds) * time.Second)
+	w.Header().Set("X-Accel-Buffering", "no")
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	events := make(chan watchEvent, 128)
+	go s.coordinateWatch(ctx, jobID, events)
+	controller := http.NewResponseController(w)
+	defer controller.SetWriteDeadline(time.Time{})
 	for {
-		pod, err := kubernetes.FindRayJobSubmitterPod(r.Context(), s.typedClient, s.cfg.TargetNamespace, jobID)
-		if err == nil && pod != nil {
-			fmt.Fprintf(w, "Streaming logs from pod %s container ray-job-submitter\n", pod.Name)
-			if flusher != nil {
-				flusher.Flush()
-			}
-			audit(r, "logs_stream_start", map[string]any{"job_id": jobID, "pod": pod.Name})
-			if err := kubernetes.StreamPodLogs(r.Context(), s.typedClient, s.cfg.TargetNamespace, pod.Name, "ray-job-submitter", flushWriter{w: w, f: flusher}); err != nil {
-				fmt.Fprintf(w, "\nfailed to stream logs from pod %s container ray-job-submitter: %v\n", pod.Name, err)
-				if flusher != nil {
-					flusher.Flush()
-				}
-				audit(r, "logs_stream_failed", map[string]any{"job_id": jobID, "pod": pod.Name})
-			} else {
-				audit(r, "logs_stream_done", map[string]any{"job_id": jobID, "pod": pod.Name})
-			}
-			return
-		}
-		if pod != nil && pod.Status.Phase == "Failed" {
-			fmt.Fprintf(w, "RayJob submitter pod %s failed before logs could be streamed\n", pod.Name)
-			if flusher != nil {
-				flusher.Flush()
-			}
-			audit(r, "logs_head_failed", map[string]any{"job_id": jobID, "pod": pod.Name})
-			return
-		}
-		if time.Now().After(deadline) {
-			fmt.Fprintf(w, "timed out waiting for RayJob submitter pod for job %s\n", jobID)
-			if flusher != nil {
-				flusher.Flush()
-			}
-			audit(r, "logs_wait_timeout", map[string]any{"job_id": jobID})
-			return
-		}
-		fmt.Fprintf(w, "waiting for RayJob submitter pod for job %s\n", jobID)
-		if flusher != nil {
-			flusher.Flush()
-		}
 		select {
-		case <-r.Context().Done():
+		case <-ctx.Done():
 			return
-		case <-time.After(10 * time.Second):
+		case ev := <-events:
+			// Bound a blocked client write as well as upstream reads.
+			if err := controller.SetWriteDeadline(time.Now().Add(15 * time.Second)); err != nil && err != http.ErrNotSupported {
+				return
+			}
+			if ev.Type == "final" {
+				return
+			}
+			line := ev.Message
+			if ev.Type == "log" {
+				line = ev.Line
+			}
+			if _, err := fmt.Fprintln(w, line); err != nil {
+				return
+			}
+			if err := controller.Flush(); err != nil && err != http.ErrNotSupported {
+				return
+			}
+			if err := controller.SetWriteDeadline(time.Time{}); err != nil && err != http.ErrNotSupported {
+				return
+			}
 		}
 	}
 }
@@ -381,19 +346,6 @@ func formatWatchText(ev watchEvent) string {
 
 func isValidJobID(jobID string) bool {
 	return len(jobID) <= rayjob.MaxRayJobNameLength && jobIDPattern.MatchString(jobID)
-}
-
-type flushWriter struct {
-	w http.ResponseWriter
-	f http.Flusher
-}
-
-func (fw flushWriter) Write(p []byte) (int, error) {
-	n, err := fw.w.Write(p)
-	if fw.f != nil {
-		fw.f.Flush()
-	}
-	return n, err
 }
 
 func auditFields(req submitRayJobRequest, jobID string) map[string]any {

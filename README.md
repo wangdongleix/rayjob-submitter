@@ -185,6 +185,8 @@ curl -sS -X DELETE \
 
 The workflow cleanup call is the primary cleanup path. The service also runs a background stale RayJob cleanup loop by default: every 600 seconds it deletes submitter-managed RayJobs with the `ci.verl/job-id` label that are older than 21600 seconds. This is a fallback for workflow attempts that are stopped from the GitHub UI before the DELETE step runs.
 
+Log streams automatically reconnect after EOF or transient errors, resuming from Kubernetes timestamps with overlap replay suppression. Each container starts with its last 1000 lines; reconnects have no tail cap. Both `/watch` and `/logs/stream` use this recovery path. On RayJob success/failure, up to 30 seconds of final log catch-up precedes completion. Log errors or incomplete draining never change the RayJob result. `TIMEOUT` and `NOT_FOUND` skip draining; client disconnects cancel immediately. See [watch behavior and recovery limits](docs/design.md#watch-行为).
+
 ## Template Patches
 
 `template_patches` is a restricted JSON Patch surface for per-job tuning. It supports only `add` and `replace`, and only for whitelisted resource/runtime paths. It is not a raw RayJob YAML patch mechanism.
