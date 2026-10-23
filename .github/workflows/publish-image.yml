@@ -76,6 +76,8 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64
           push: true
+          # Avoid showing an unknown/unknown attestation entry in Quay.
+          provenance: false
           tags: ${{ env.IMAGE }}:${{ steps.image.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
