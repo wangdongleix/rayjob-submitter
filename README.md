@@ -116,6 +116,29 @@ flowchart LR
 | `MAX_TEMPLATE_PATCHES` | `32` |
 | `MAX_TEMPLATE_PATCH_VALUE_LENGTH` | `2048` |
 
+## Image publishing
+
+The GitHub Actions workflow `.github/workflows/publish-image.yml` builds the
+Dockerfile for `linux/amd64` and pushes to `quay.io/albert54/rayjob-submitter`.
+It logs in as the Quay robot account `albert54+cisystem` using the GitHub Actions
+secret `QUAY_TOKEN`. Give that robot write access to the Quay repository.
+
+- **Tag push:** pushing a tag such as `v0.0.10` publishes
+  `quay.io/albert54/rayjob-submitter:v0.0.10`. The tagged commit must be reachable
+  from `main`; tags on other commits fail before building or publishing.
+- **Manual:** open **Actions → Publish Docker image → Run workflow**, select
+  `main` (or another ref whose commit is reachable from `main`), and optionally
+  supply `image_tag`. Without that input, the workflow uses the selected Git tag
+  or `sha-<full-commit-SHA>` for a branch run.
+
+Tags must be valid Docker tags: at most 128 letters, digits, underscores, dots,
+or hyphens, with no leading dot or hyphen. The workflow does not automatically
+update `latest`. Publishing again with the same image tag replaces that tag.
+For manual dispatch, the workflow must exist on the GitHub default branch.
+
+After publishing, update the submitter image in `deploy/deployment.yaml` to the
+new tag and apply it to deploy that version.
+
 ## Deployment
 
 ```bash
